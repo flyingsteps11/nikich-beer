@@ -1,0 +1,25 @@
+# Оригиналы фото и видео Никича — никогда не коммитятся (SPEC §2)
+raw/
+
+# Озвучка: ключи и промежуточные файлы (SPEC §16)
+.env
+*.env
+tools/out/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node (зависимостей нет, но на всякий случай)
+node_modules/
+
+# ОС и редакторы
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Локальные настройки Claude Code
+.claude/settings.local.json

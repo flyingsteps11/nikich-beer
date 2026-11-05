@@ -1,0 +1,10 @@
+{
+  "name": "nikich-beer",
+  "private": true,
+  "type": "module",
+  "description": "Никич: Путь к Пиву — браузерный платформер-стёб",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "test": "node --test"
+  }
+}
