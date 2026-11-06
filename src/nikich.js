@@ -1,7 +1,7 @@
 // Никич: здоровье, жизни, движение и 4 атаки (SPEC §5, §5.1). Чистая логика, без DOM.
 
 import { createBody, stepPlatformer, isBlocking, fellOut } from './physics.js';
-import { damageZoznik, stunZoznik, holdZoznik } from './zozniki.js';
+import { damageZoznik, stunZoznik, holdZoznik, touching } from './zozniki.js';
 import { NIKICH, ATTACKS, SPEECH, ITEMS, FACES } from './config.js';
 
 export function createNikich(x, y, N = NIKICH) {
@@ -17,9 +17,12 @@ export function createNikich(x, y, N = NIKICH) {
     aim: { x: 1, y: 0 }, // единичный вектор на курсор
     cooldowns: { shot: 0, dog: 0, stun: 0 },
     superMeter: 0,
-    face: { mood: null, t: 0, shoot: 0 },
+    face: { mood: null, t: 0, shoot: 0, near: false },
     // Временные эффекты Предметов, с до конца (SPEC §7)
-    effects: { vodka: 0, beer: 0, scooter: 0 },
+    effects: { vodka: 0, beer: 0, scooter: 0, smoke: 0, luck: 0 },
+    missGrace: 0,
+    drunk: 0,
+    infiniteLives: false,
     // Множители от Улучшений и Бонусов (этапы 4 и 6)
     mods: {
       damageMul: 1,
@@ -27,7 +30,7 @@ export function createNikich(x, y, N = NIKICH) {
       superChargeMul: 1,
       dogHoldBonus: 0,
       stunRadiusMul: 1,
-      beerDamageMul: 1, // «Железная печень» даст 0,5
+      beerTimeMul: 1,
       speedMul: 1,
       airJumps: 0, // «Прыгучий» — двойной прыжок
       magnetRadius: 0, // px, 0 — магнита нет
@@ -54,6 +57,21 @@ export function setAim(n, worldX, worldY, N = NIKICH) {
   if (Math.abs(dx) > 0.5) n.facing = Math.sign(dx);
 }
 
+export function steerAim(n, worldX, worldY, dt, I = ITEMS, N = NIKICH) {
+  if (n.drunk <= 0) {
+    setAim(n, worldX, worldY, N);
+    return;
+  }
+  const prev = n.aim;
+  setAim(n, worldX, worldY, N);
+  const from = Math.atan2(prev.y, prev.x);
+  let delta = Math.atan2(n.aim.y, n.aim.x) - from;
+  delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+  const a = from + delta * (1 - Math.exp(-dt / (I.beerZero.aimLagPerStack * n.drunk)));
+  n.aim = { x: Math.cos(a), y: Math.sin(a) };
+  if (Math.abs(n.aim.x) > 0.05) n.facing = Math.sign(n.aim.x);
+}
+
 // Урон всех атак с учётом Стопарика
 export function damageMul(n, I = ITEMS) {
   return n.mods.damageMul * (n.effects.vodka > 0 ? I.vodka.damageMul : 1);
@@ -71,11 +89,18 @@ export function movementMods(n, I = ITEMS) {
     speedMul *= I.scooter.speedMul;
     jumpHeight *= I.scooter.jumpHeightMul;
   }
-  if (n.effects.beer > 0) {
-    speedMul *= I.beerZero.speedMul;
-    jumpHeight *= I.beerZero.jumpHeightMul;
+  let accelMul = 1;
+  if (n.effects.smoke > 0) {
+    speedMul *= I.cigarette.speedMul;
+    jumpHeight *= I.cigarette.jumpHeightMul;
   }
-  return { speedMul, jumpMul: Math.sqrt(jumpHeight), passBarriers: isRiding(n) };
+  if (n.drunk > 0) {
+    const B = I.beerZero;
+    speedMul *= Math.max(B.minSpeedMul, 1 - B.speedPerStack * n.drunk);
+    jumpHeight *= Math.max(B.minSpeedMul, 1 - B.jumpPerStack * n.drunk);
+    accelMul = 1 / (1 + B.accelPerStack * n.drunk);
+  }
+  return { speedMul, jumpMul: Math.sqrt(jumpHeight), passBarriers: isRiding(n), accelMul };
 }
 
 // Падение с Самоката: лицом в асфальт
@@ -88,10 +113,17 @@ function crash(n, I) {
 export function updateNikich(n, intent, dt, map, P, I = ITEMS) {
   for (const k of Object.keys(n.cooldowns)) n.cooldowns[k] = Math.max(0, n.cooldowns[k] - dt);
   n.invuln = Math.max(0, n.invuln - dt);
+  n.effects.luck = Math.max(0, n.effects.luck - dt);
+  n.missGrace = Math.max(0, n.missGrace - dt);
   n.hurtLock = Math.max(0, n.hurtLock - dt);
   n.stun = Math.max(0, n.stun - dt);
   n.effects.vodka = Math.max(0, n.effects.vodka - dt);
   n.effects.beer = Math.max(0, n.effects.beer - dt);
+  n.effects.smoke = Math.max(0, n.effects.smoke - dt);
+  if (n.drunk > 0 && n.effects.beer <= 0) {
+    n.drunk -= 1;
+    if (n.drunk > 0) n.effects.beer = I.beerZero.stackTime * n.mods.beerTimeMul;
+  }
   n.face.t = Math.max(0, n.face.t - dt);
   n.face.shoot = Math.max(0, n.face.shoot - dt);
   if (n.face.t <= 0) n.face.mood = null;
@@ -129,7 +161,7 @@ export function ramZozniki(n, zozniki, I = ITEMS) {
   if (!isRiding(n)) return hits;
   const S = I.scooter;
   for (const z of zozniki) {
-    if (!z.alive || (z.ramCd ?? 0) > 0 || !overlaps(n.body, z.body)) continue;
+    if (!z.alive || (z.ramCd ?? 0) > 0 || !touching(n.body, z.body)) continue;
     z.ramCd = S.ramCooldown;
     const dir = Math.sign(z.body.x + z.body.w / 2 - (n.body.x + n.body.w / 2)) || n.facing;
     z.body.vx = dir * S.ramKnockX;
@@ -172,7 +204,7 @@ function overlaps(a, b) {
 export function tryShoot(n, A = ATTACKS, N = NIKICH) {
   if (n.cooldowns.shot > 0 || !canAttack(n)) return null;
   const S = A.shot;
-  n.cooldowns.shot = S.cooldown / n.mods.shotRateMul;
+  n.cooldowns.shot = S.cooldown / n.mods.shotRateMul / (n.effects.smoke > 0 ? ITEMS.cigarette.shotRateMul : 1);
   n.face.shoot = FACES.shootTime;
   const h = handPos(n, N);
   return {
@@ -182,7 +214,7 @@ export function tryShoot(n, A = ATTACKS, N = NIKICH) {
     vy: n.aim.y * S.speed,
     travelled: 0,
     range: S.range,
-    damage: S.damage * damageMul(n),
+    damage: S.damage * damageMul(n) * (1 + ITEMS.beerZero.shotDamagePerStack * n.drunk),
     alive: true,
   };
 }
@@ -315,8 +347,14 @@ export function trySuper(n, zozniki, view, A = ATTACKS) {
 
 // ---------- Урон по Никичу ----------
 
-export function takeDamage(n, amount, fromX, N = NIKICH) {
+export function takeDamage(n, amount, fromX, N = NIKICH, rng = Math.random) {
   if (n.invuln > 0 || amount <= 0) return { hit: false, lifeLost: false, gameOver: false };
+  if (n.missGrace > 0) return { hit: false, missed: false, lifeLost: false, gameOver: false };
+  if (n.effects.luck > 0 && rng() < ITEMS.chip.missChance) {
+    n.missGrace = ITEMS.chip.missGrace;
+    return { hit: false, missed: true, lifeLost: false, gameOver: false };
+  }
+  amount *= Math.max(0, 1 - ITEMS.beerZero.armorPerStack * n.drunk);
   n.health -= amount;
   n.invuln = N.invulnTime;
   n.hurtLock = N.hurtLockTime;
@@ -338,9 +376,11 @@ export function loseHealth(n, amount, { already = false } = {}) {
 
 // Минус жизнь (здоровье кончилось или Яма): здоровье полное, эффекты сброшены
 export function loseLife(n) {
-  n.lives -= 1;
+  if (!n.infiniteLives) n.lives -= 1;
   n.health = n.maxHealth;
-  n.effects = { vodka: 0, beer: 0, scooter: 0 };
+  n.effects = { vodka: 0, beer: 0, scooter: 0, smoke: 0, luck: 0 };
+  n.missGrace = 0;
+  n.drunk = 0;
   n.stun = 0;
   n.hurtLock = 0;
   setFace(n, 'hurt', FACES.hurtTime);
@@ -355,10 +395,18 @@ export function setFace(n, mood, duration = FACES.moodTime) {
 export function nikichFace(n, F = FACES) {
   if (n.stun > 0 || n.face.mood === 'hurt') return 'hurt';
   if (n.face.mood) return n.face.mood;
-  if (n.face.shoot > 0) return 'shoot';
+  if (n.face.shoot > 0) return 'fight';
   if (!n.body.onGround && n.body.vy < -F.jumpMinRise) return 'jump';
-  if (n.health <= n.maxHealth * F.lowHealth) return 'hurt';
+  if (n.face.near) return 'near';
+  if (n.effects.smoke > 0) return 'smoke';
+  if (n.drunk >= 2 || n.health <= n.maxHealth * F.lowHealth) return 'tipsy';
   return 'happy';
+}
+
+export function senseNear(n, targets, F = FACES) {
+  const c = centerOf(n.body);
+  n.face.near = targets.some((z) => z.alive && Math.hypot(z.body.x + z.body.w / 2 - c.x, z.body.y + z.body.h / 2 - c.y) <= F.nearRadius);
+  return n.face.near;
 }
 
 export function heal(n, amount) {

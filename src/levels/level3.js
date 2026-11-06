@@ -11,13 +11,15 @@ const FEET = G - 1;
 const BOTTOM = MAP_HEIGHT_TILES - 1;
 
 export const THEME = {
-  sky: ['#6d597a', '#f28f6b'],
+  tiles: 'hala',
+  time: 'afternoon',
+  props: [{ type: 'stall', weight: 3 }, { type: 'flowers', weight: 2 }, { type: 'tree', weight: 2 }, { type: 'lampOld', weight: 2 }, { type: 'bin', weight: 1 }, { type: 'bench', weight: 1 }, { type: 'column', weight: 1 }, { type: 'shop', weight: 3 }, { type: 'posterWall', weight: 2 }, { type: 'citylight', weight: 1 }, { type: 'zabka', weight: 1, min: 2 }],
   layers: [
-    { factor: 0.12, base: 46, color: '#8a6d88', fill: 'kamienice',
-      landmarks: [{ type: 'pkin', at: 0.78, scale: 0.6 }] },
-    { factor: 0.3, base: 36, color: '#6a4656', windows: '#ffcf70', fill: 'kamienice',
-      landmarks: [{ type: 'hala', at: 0.3, scale: 1 }, { type: 'hala', at: 0.62, scale: 0.9 }] },
-    { factor: 0.55, base: 30, color: '#3d2835', fill: 'trees' },
+    { factor: 0.1, base: 52, tone: 'far', fill: 'kamienice',
+      landmarks: [{ type: 'pkin', at: 0.75, scale: 0.55 }, { type: 'varso', at: 0.9, scale: 0.45 }] },
+    { factor: 0.3, base: 36, tone: 'mid', fill: 'kamienice',
+      landmarks: [{ type: 'hala', at: 0.3, scale: 1 }, { type: 'hala', at: 0.66, scale: 0.95 }] },
+    { factor: 0.55, base: 30, tone: 'near', fill: 'trees' },
   ],
 };
 
@@ -112,9 +114,9 @@ export function build(ts) {
     { type: 'edge', atTx: 160, kinds: ['smoothie', 'runner', 'runner', 'smoothie'], interval: 0.7 },
   ];
   m.locks = [
-    { tx0: 8, tx1: 31, waves: [['runner', 'yoga', 'runner'], ['smoothie', 'runner', 'runner']] },
-    { tx0: 107, tx1: 125, waves: [['yoga', 'runner', 'smoothie'], ['runner', 'runner', 'yoga', 'smoothie']] },
-    { tx0: 157, tx1: 180, waves: [['runner', 'smoothie', 'runner'], ['yoga', 'runner', 'smoothie', 'runner'], ['runner', 'runner', 'runner', 'smoothie']] },
+    { tx0: 8, tx1: 31, waves: [['runner', 'yoga'], ['smoothie', 'runner']] },
+    { tx0: 107, tx1: 125, waves: [['yoga', 'runner'], ['runner', 'smoothie', 'runner']] },
+    { tx0: 157, tx1: 180, waves: [['runner', 'smoothie', 'runner'], ['yoga', 'runner', 'runner']] },
   ];
   return m;
 }

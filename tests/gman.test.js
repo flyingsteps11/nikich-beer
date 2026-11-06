@@ -188,10 +188,31 @@ test('фаза Призыв: пока живы призванные Зожник
   untilFight(g, map, t);
   damageZoznik(g, 999);
   untilFight(g, map, t);
-  run(g, map, t, DT, { alive: 2 });
-  assert.equal(damageZoznik(g, 50).dealt, 0);
+  run(g, map, t, GMAN.summon.firstWave + DT, { alive: 2 });
+  assert.equal(damageZoznik(g, 50).dealt, 0, 'волна только что пришла — щит');
   run(g, map, t, DT, { alive: 0 });
+  assert.ok(damageZoznik(g, 50).dealt > 0, 'все уложены — щита нет');
+});
+
+test('фаза Призыв: застрявшие Зожники не держат щит вечно', () => {
+  const map = arena();
+  const g = createGman(map);
+  const t = nikichBody(40);
+  untilFight(g, map, t);
+  damageZoznik(g, 999);
+  untilFight(g, map, t);
+  const S = GMAN.summon;
+  run(g, map, t, S.firstWave + DT, { alive: 3 });
+  assert.equal(g.shielded, true);
+  run(g, map, t, S.shieldTime + DT, { alive: 3 });
+  assert.equal(g.shielded, false, 'щит спал, хотя Зожники живы');
   assert.ok(damageZoznik(g, 50).dealt > 0);
+  let open = 0;
+  for (let i = 0; i < Math.round((S.waveEvery * 4) / DT); i++) {
+    updateGman(g, DT, map, PHYSICS, t, { alive: 3 }, GMAN, () => 0);
+    if (!g.shielded) open += DT;
+  }
+  assert.ok(open >= (S.waveEvery - S.shieldTime) * 3, `окно для урона ${open.toFixed(1)} с`);
 });
 
 test('фаза Зеркало: бежит к Никичу и стреляет Щелбаном', () => {

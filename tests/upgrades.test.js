@@ -99,15 +99,16 @@ test('Папа, Собака, Печень, 5:0 — множители и при
   applyUpgrades(n, ['dad-coming', 'angry-dog', 'iron-liver', 'five-zero']);
   assert.equal(n.mods.superChargeMul, 1.2);
   assert.equal(n.mods.dogHoldBonus, 1);
-  assert.equal(n.mods.beerDamageMul, 0.5);
+  assert.equal(n.mods.beerTimeMul, 0.5);
   assert.equal(n.mods.stunRadiusMul, 1.2);
 });
 
-test('Железная печень: Пиво 0,0 отнимает вдвое меньше', () => {
+test('Железная печень: Пиво 0,0 действует вдвое короче', () => {
   const n = createNikich(0, 0);
   applyUpgrade(n, 'iron-liver');
-  applyItem(n, 'beerZero', { timer: null, score: 0, stats: { kills: 0, shots: 0, deaths: 0, time: 0 } });
-  assert.equal(n.health, NIKICH.maxHealth - ITEMS.beerZero.damage / 2);
+  applyItem(n, 'beerZero', { timer: null, stats: { kills: 0, shots: 0, deaths: 0, time: 0 } });
+  assert.equal(n.effects.beer, ITEMS.beerZero.duration / 2);
+  assert.equal(n.health, NIKICH.maxHealth);
 });
 
 test('Прыгучий: второй прыжок в воздухе, без Улучшения — нет', () => {

@@ -1,5 +1,6 @@
 import { TILE, createBody, stepPlatformer } from './physics.js';
 import { GMAN } from './config.js';
+import { touching } from './zozniki.js';
 import { GMAN_SCENES, GMAN_VERDICT } from './lines.js';
 
 export const PHASES = Object.freeze(['briefcase', 'summon', 'mirror']);
@@ -42,6 +43,7 @@ export function createGman(map, G = GMAN) {
     takenMul: G.takenMul,
     superMul: G.superMul,
     shielded: false,
+    shieldT: 0,
     invuln: 0,
     floor: G.health,
     phase: -1,
@@ -142,7 +144,7 @@ function buttShot(g, tc, M) {
 function throwBriefcase(g, t, events, G) {
   const b = g.body;
   const tc = centerOf(t);
-  events.push({ type: 'throw', shot: briefcaseShot(b.x + b.w / 2, b.y + 8, tc.x, tc.y, G.briefcase) });
+  events.push({ type: 'throw', shot: { ...briefcaseShot(b.x + b.w / 2, b.y + 8, tc.x, tc.y, G.briefcase), owner: g } });
 }
 
 const BRAINS = {
@@ -174,7 +176,8 @@ const BRAINS = {
   summon(g, dt, map, t, events, G, ctx) {
     const S = G.summon;
     const ts = map.tileSize;
-    g.shielded = ctx.alive > 0;
+    g.shieldT = Math.max(0, g.shieldT - dt);
+    g.shielded = ctx.alive > 0 && g.shieldT > 0;
     g.actTimer -= dt;
     if (g.actTimer <= 0) {
       g.actTimer = S.waveEvery;
@@ -189,6 +192,8 @@ const BRAINS = {
         const requests = kinds.map((kind, i) => ({ kind, ...points[i % points.length] }));
         events.push({ type: 'summon', requests });
         events.push({ type: 'say', key: 'gmanSummon' });
+        g.shieldT = S.shieldTime;
+        g.shielded = true;
       }
     }
     if (g.cd.throw <= 0) {
@@ -219,7 +224,7 @@ const BRAINS = {
       return IDLE;
     }
     if (g.cd.shot <= 0 && dist <= M.shotRange) {
-      events.push({ type: 'shot', shot: buttShot(g, tc, M) });
+      events.push({ type: 'shot', shot: { ...buttShot(g, tc, M), owner: g } });
       g.cd.shot = M.shotCooldown;
     }
 
@@ -309,7 +314,7 @@ export function updateGman(g, dt, map, P, target, ctx = { alive: 0 }, G = GMAN, 
 
 export function gmanContactDamage(g, body, G = GMAN) {
   if (!isFighting(g) || phaseName(g) !== 'mirror' || g.stun > 0 || !g.alive) return 0;
-  return overlaps(g.body, body) ? G.mirror.touchDamage : 0;
+  return touching(g.body, body) ? G.mirror.touchDamage : 0;
 }
 
 export function gmanGrace(g, map, G = GMAN) {

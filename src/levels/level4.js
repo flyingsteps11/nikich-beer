@@ -11,14 +11,16 @@ const FEET = G - 1;
 const BOTTOM = MAP_HEIGHT_TILES - 1;
 
 export const THEME = {
-  sky: ['#1d3557', '#e98a5b'],
+  tiles: 'pkin',
+  time: 'sunset',
+  props: [{ type: 'lampOld', weight: 3 }, { type: 'tree', weight: 2 }, { type: 'bench', weight: 2 }, { type: 'flowers', weight: 2 }, { type: 'love', weight: 1 }, { type: 'syrenka', weight: 1 }, { type: 'bin', weight: 1 }, { type: 'column', weight: 1 }, { type: 'citylight', weight: 2 }, { type: 'shop', weight: 2 }, { type: 'zabka', weight: 1, min: 2 }],
   layers: [
-    { factor: 0.1, base: 50, color: '#4f5b86', fill: 'towers',
-      landmarks: [{ type: 'varso', at: 0.15, scale: 0.7 }, { type: 'spire', at: 0.32, scale: 0.6 }] },
-    { factor: 0.28, base: 38, color: '#3c3358', windows: '#ffd166', fill: 'none',
+    { factor: 0.1, base: 54, tone: 'far', fill: 'glass',
+      landmarks: [{ type: 'varso', at: 0.15, scale: 0.75 }, { type: 'zlota44', at: 0.3, scale: 0.85 }, { type: 'spire', at: 0.88, scale: 0.6 }] },
+    { factor: 0.28, base: 38, tone: 'mid', fill: 'socrealist',
       landmarks: [{ type: 'pkin', at: 0.45, scale: 1.15 }] },
-    { factor: 0.55, base: 30, color: '#272140', fill: 'none',
-      landmarks: [{ type: 'tarasy', at: 0.8, scale: 1.2 }, { type: 'tarasy', at: 0.95, scale: 0.8 }] },
+    { factor: 0.55, base: 30, tone: 'near', fill: 'lamps',
+      landmarks: [{ type: 'tarasy', at: 0.8, scale: 1.2 }] },
   ],
 };
 
@@ -121,8 +123,8 @@ export function build(ts) {
     { type: 'edge', atTx: 186, kinds: ['cyclist', 'runner', 'smoothie', 'moto'], interval: 0.9 },
   ];
   m.locks = [
-    { tx0: 28, tx1: 52, waves: [['runner', 'cyclist', 'runner'], ['smoothie', 'yoga', 'runner', 'runner']] },
-    { tx0: 180, tx1: 200, waves: [['cyclist', 'runner', 'smoothie'], ['runner', 'yoga', 'cyclist', 'runner'], ['smoothie', 'runner', 'runner', 'cyclist']] },
+    { tx0: 28, tx1: 52, waves: [['runner', 'cyclist'], ['smoothie', 'yoga', 'runner']] },
+    { tx0: 180, tx1: 200, waves: [['cyclist', 'runner', 'smoothie'], ['runner', 'yoga', 'runner']] },
   ];
   return m;
 }

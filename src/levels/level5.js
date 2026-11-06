@@ -9,12 +9,15 @@ const SIDE = G - 3;
 const TOP = G - 6;
 
 export const THEME = {
-  sky: ['#0b0c1e', '#3a2d5c'],
+  tiles: 'zlota',
+  time: 'night',
+  props: [{ type: 'neon', weight: 2 }, { type: 'lampOld', weight: 3 }, { type: 'bin', weight: 1 }, { type: 'bench', weight: 1 }, { type: 'shop', weight: 2 }, { type: 'citylight', weight: 1 }, { type: 'zabka', weight: 1, min: 1 }],
   layers: [
-    { factor: 0, base: 56, color: '#2b2650', windows: '#ffe8a3', fill: 'towers',
-      landmarks: [{ type: 'pkin', at: 0.3, scale: 0.85 }, { type: 'varso', at: 0.8, scale: 0.6 }] },
-    { factor: 0, base: 32, color: '#1c1838', windows: '#ffd166', fill: 'kamienice' },
-    { factor: 0, base: 30, color: '#120f26', windows: '#ffe8a3', fill: 'lamps' },
+    { factor: 0, base: 58, tone: 'far', fill: 'glass',
+      landmarks: [{ type: 'pkin', at: 0.28, scale: 0.85 }, { type: 'zlota44', at: 0.62, scale: 0.8 }, { type: 'varso', at: 0.82, scale: 0.6 }] },
+    { factor: 0, base: 34, tone: 'mid', fill: 'socrealist',
+      landmarks: [{ type: 'neon', at: 0.88, scale: 1 }] },
+    { factor: 0, base: 30, tone: 'near', fill: 'lamps' },
   ],
 };
 

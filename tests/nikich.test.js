@@ -8,7 +8,7 @@ import {
 } from '../src/nikich.js';
 import { createZoznik } from '../src/zozniki.js';
 import { parseMap } from '../src/world.js';
-import { PHYSICS, TILE_SIZE, LOOP, ATTACKS, NIKICH, SPEECH } from '../src/config.js';
+import { PHYSICS, TILE_SIZE, LOOP, ATTACKS, NIKICH, SPEECH, ITEMS } from '../src/config.js';
 
 const TS = TILE_SIZE;
 const DT = LOOP.step;
@@ -349,7 +349,7 @@ test('выражение лица: обычное, прыжок, Щелбан, �
   for (let i = 0; i < 120 && !n.body.onGround; i++) updateNikich(n, { ...IDLE, jumpHeld: true }, DT, map, PHYSICS);
   assert.equal(nikichFace(n), 'happy');
   tryShoot(n);
-  assert.equal(nikichFace(n), 'shoot');
+  assert.equal(nikichFace(n), 'fight');
   for (let i = 0; i < Math.ceil(FACES.shootTime / DT) + 1; i++) updateNikich(n, IDLE, DT, map, PHYSICS);
   assert.equal(nikichFace(n), 'happy');
   setFace(n, 'grin');
@@ -360,8 +360,60 @@ test('выражение лица: обычное, прыжок, Щелбан, �
   for (let i = 0; i < Math.ceil(FACES.hurtTime / DT) + 1; i++) updateNikich(n, IDLE, DT, map, PHYSICS);
   assert.notEqual(nikichFace(n), 'hurt');
   n.health = n.maxHealth * FACES.lowHealth;
-  assert.equal(nikichFace(n), 'hurt', 'мало здоровья');
+  assert.equal(nikichFace(n), 'tipsy', 'мало здоровья');
   n.health = n.maxHealth;
   stunNikich(n, 1);
   assert.equal(nikichFace(n), 'hurt', 'оглушён');
+});
+
+test('выражение лица: Зожник рядом — косится, далеко — обычное', async () => {
+  const { nikichFace, senseNear } = await import('../src/nikich.js');
+  const { FACES } = await import('../src/config.js');
+  const map = arena();
+  const n = nikichAt(map, 100);
+  const far = dummyAt(100 + FACES.nearRadius * 2);
+  assert.equal(senseNear(n, [far]), false);
+  assert.equal(nikichFace(n), 'happy');
+  const close = dummyAt(130);
+  assert.equal(senseNear(n, [far, close]), true);
+  assert.equal(nikichFace(n), 'near');
+  close.alive = false;
+  senseNear(n, [far, close]);
+  assert.equal(nikichFace(n), 'happy', 'убитый не считается');
+});
+
+test('чит бесконечных жизней: здоровье и Яма работают, жизни не кончаются', async () => {
+  const { loseLife } = await import('../src/nikich.js');
+  const n = createNikich(0, 0);
+  n.infiniteLives = true;
+  const lives = n.lives;
+  for (let i = 0; i < 10; i++) {
+    n.invuln = 0;
+    const r = takeDamage(n, n.maxHealth + 5, 0);
+    assert.equal(r.lifeLost, true);
+    assert.equal(r.gameOver, false);
+  }
+  assert.equal(loseLife(n).gameOver, false);
+  assert.equal(n.lives, lives);
+  assert.equal(n.health, n.maxHealth);
+  const plain = createNikich(0, 0);
+  assert.equal(plain.infiniteLives, false, 'по умолчанию выключен');
+});
+
+test('Удача: промах не снимает здоровье и даёт короткую передышку', () => {
+  const n = createNikich(0, 0);
+  n.effects.luck = ITEMS.chip.luckTime;
+  const r = takeDamage(n, 20, 250, NIKICH, () => 0);
+  assert.equal(r.hit, false);
+  assert.equal(r.missed, true);
+  assert.equal(n.health, NIKICH.maxHealth);
+  assert.equal(takeDamage(n, 20, 250, NIKICH, () => 0.99).hit, false, 'во время передышки не бьют');
+  n.missGrace = 0;
+  assert.equal(takeDamage(n, 20, 250, NIKICH, () => 0.99).hit, true, 'выше шанса — попадание');
+});
+
+test('Без Удачи промахов нет', () => {
+  const n = createNikich(0, 0);
+  const r = takeDamage(n, 20, 250, NIKICH, () => 0);
+  assert.equal(r.hit, true);
 });

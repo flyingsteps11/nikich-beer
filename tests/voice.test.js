@@ -4,7 +4,6 @@ import { readdirSync } from 'node:fs';
 
 import { Voice, voiceClips } from '../src/audio.js';
 import { VOICE } from '../src/config.js';
-import { LINES, VOICE_LINES } from '../src/lines.js';
 
 const VOICE_DIR = new URL('../assets/voice/', import.meta.url);
 
@@ -12,16 +11,14 @@ function fakeCtx() {
   const ctx = {
     state: 'running',
     currentTime: 0,
-    started: [],
     destination: {},
     createGain: () => ({ gain: { value: 1 }, connect() {} }),
     createBufferSource: () => {
       const src = {
         buffer: null,
-        playbackRate: { value: 1 },
         connect() {},
         disconnect() {},
-        start() { ctx.started.push(src); },
+        start() {},
         stop() { src.stopped = true; },
       };
       return src;
@@ -38,50 +35,43 @@ function readyVoice(opts = {}) {
   return v;
 }
 
-test('каждая озвученная реплика есть в пулах LINES', () => {
-  const all = new Set(Object.values(LINES).flat());
-  for (const text of Object.keys(VOICE_LINES)) assert.ok(all.has(text), text);
-});
+const playing = (v) => v.current && v.current.src.buffer.name;
 
 test('все клипы лежат в assets/voice и лишних файлов нет', () => {
   const files = readdirSync(VOICE_DIR).filter((f) => f.endsWith('.wav')).map((f) => f.slice(0, -4)).sort();
   assert.deepEqual(files, voiceClips().sort());
 });
 
-test('реплика с клипом звучит, без клипа — запасная группа события', () => {
+test('у каждого приоритета и кулдауна есть группа', () => {
+  for (const key of [...Object.keys(VOICE.priority), ...Object.keys(VOICE.cooldown)]) assert.ok(VOICE.groups[key], key);
+});
+
+test('событие играет свой клип', () => {
   const v = readyVoice();
-  assert.equal(v.speak('Это пиздец.', 'pit'), true);
-  assert.equal(v.current.src.buffer.name, 'pizdec');
+  assert.equal(v.group('firstBeer'), true);
+  assert.equal(playing(v), 'first-beer');
+  assert.equal(v.group('nope'), false);
+});
+
+test('реплика не перебивает равную, но уступает важной', () => {
+  const v = readyVoice();
+  v.group('hurt');
+  assert.equal(v.group('dealDamage'), false);
+  assert.equal(playing(v), 'khokhol-1');
+  const first = v.current.src;
+  assert.equal(v.group('waveClear'), true);
+  assert.equal(first.stopped, true);
+  assert.equal(v.group('beer'), false);
+});
+
+test('кулдаун группы', () => {
+  const v = readyVoice();
+  assert.equal(v.group('hurt'), true);
   v.current = null;
-  assert.equal(v.speak('ПАМАГИТЕ', 'pit'), true);
-  assert.equal(v.current.src.buffer.name, VOICE.groups.pit[0]);
-  assert.equal(v.speak('5:0!', 'stun'), false);
-});
-
-test('междометие не перебивает реплику, реплика перебивает междометие', () => {
-  const v = readyVoice();
-  v.line('На улицу.');
-  assert.equal(v.grunt('hit'), false);
-  const v2 = readyVoice();
-  v2.grunt('hit');
-  const grunt = v2.current.src;
-  assert.equal(v2.line('На улицу.'), true);
-  assert.equal(grunt.stopped, true);
-});
-
-test('междометия не чаще gruntCooldown', () => {
-  const v = readyVoice();
-  assert.equal(v.grunt('hit'), true);
-  v.current = null;
-  v.ctx.currentTime = VOICE.gruntCooldown / 2;
-  assert.equal(v.grunt('hit'), false);
-  v.ctx.currentTime = VOICE.gruntCooldown;
-  assert.equal(v.grunt('hit'), true);
-});
-
-test('шанс группы: прыжок звучит не всегда', () => {
-  const v = readyVoice({ rng: () => 0.99 });
-  assert.equal(v.grunt('jump'), false);
+  v.ctx.currentTime = VOICE.cooldown.hurt / 2;
+  assert.equal(v.group('hurt'), false);
+  v.ctx.currentTime = VOICE.cooldown.hurt;
+  assert.equal(v.group('hurt'), true);
 });
 
 test('mute глушит и запоминается, сбой хранилища не роняет', () => {
@@ -89,7 +79,7 @@ test('mute глушит и запоминается, сбой хранилища
   const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, val) => data.set(k, val) };
   const v = readyVoice({ storage });
   assert.equal(v.toggleMute(), true);
-  assert.equal(v.line('На улицу.'), false);
+  assert.equal(v.group('heal'), false);
   assert.equal(new Voice({ storage }).muted, true);
   const broken = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
   const vb = new Voice({ storage: broken });
@@ -101,6 +91,5 @@ test('без AudioContext и загрузки — тишина без ошибо
   const v = new Voice();
   v.unlock();
   v.load();
-  assert.equal(v.speak('Это пиздец.', 'pit'), false);
-  assert.equal(v.event('final'), false);
+  assert.equal(v.group('heal'), false);
 });

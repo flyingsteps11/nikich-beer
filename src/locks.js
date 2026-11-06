@@ -21,6 +21,7 @@ export function createLocks(map, L = LOCKS) {
       timer: 0,
       side: 0,
       between: false,
+      waveTime: 0,
     };
   });
 }
@@ -33,6 +34,7 @@ function startWave(l, i) {
   l.wave = i;
   l.queue = [...l.def.waves[i]];
   l.between = false;
+  l.waveTime = 0;
 }
 
 export function updateLocks(locks, dt, ctx, L = LOCKS) {
@@ -49,6 +51,7 @@ export function updateLocks(locks, dt, ctx, L = LOCKS) {
     }
     if (l.state !== 'active') continue;
     l.timer -= dt;
+    l.waveTime += dt;
     if (l.queue.length > 0) {
       if (l.timer <= 0 && ctx.room > 0) {
         const kind = l.queue.shift();
@@ -60,7 +63,10 @@ export function updateLocks(locks, dt, ctx, L = LOCKS) {
       }
       continue;
     }
-    if (ctx.aliveIn(l.id) > 0) continue;
+    if (ctx.aliveIn(l.id) > 0) {
+      if (l.waveTime < L.waveTimeout) continue;
+      events.push({ type: 'release', lock: l });
+    }
     if (l.wave + 1 >= l.def.waves.length) {
       l.state = 'done';
       events.push({ type: 'clear', lock: l });

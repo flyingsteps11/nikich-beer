@@ -11,13 +11,16 @@ const FEET = G - 1;
 const BOTTOM = MAP_HEIGHT_TILES - 1;
 
 export const THEME = {
-  sky: ['#457b9d', '#bfe3e8'],
+  tiles: 'budowa',
+  time: 'day',
+  props: [{ type: 'cone', weight: 3 }, { type: 'fence', weight: 3 }, { type: 'lamp', weight: 2 }, { type: 'billboard', weight: 2 }, { type: 'bin', weight: 1 }, { type: 'busStop', weight: 1 }, { type: 'tree', weight: 1 }, { type: 'citylight', weight: 2 }, { type: 'posterWall', weight: 2 }, { type: 'shop', weight: 1 }, { type: 'zabka', weight: 1, min: 2 }],
   layers: [
-    { factor: 0.12, base: 44, color: '#7d93ad', fill: 'towers',
-      landmarks: [{ type: 'varso', at: 0.35, scale: 0.85 }, { type: 'spire', at: 0.6, scale: 0.8 }] },
-    { factor: 0.3, base: 36, color: '#566c88', windows: '#d7ecff', fill: 'towers',
-      landmarks: [{ type: 'crane', at: 0.2, scale: 0.8 }, { type: 'crane', at: 0.75, scale: 0.7 }] },
-    { factor: 0.55, base: 30, color: '#33435a', windows: '#f4d35e', fill: 'lamps' },
+    { factor: 0.1, base: 50, tone: 'far', fill: 'glass',
+      landmarks: [{ type: 'varso', at: 0.2, scale: 0.75 }, { type: 'skyliner', at: 0.45, scale: 0.9 }, { type: 'spire', at: 0.7, scale: 0.95 }] },
+    { factor: 0.3, base: 38, tone: 'mid', fill: 'glass',
+      landmarks: [{ type: 'crane', at: 0.15, scale: 0.85, behind: true }, { type: 'crane', at: 0.62, scale: 0.75, behind: true }] },
+    { factor: 0.55, base: 30, tone: 'near', fill: 'construction',
+      landmarks: [{ type: 'metro', at: 0.08, scale: 1 }, { type: 'metro', at: 0.55, scale: 1 }] },
   ],
 };
 
@@ -109,9 +112,9 @@ export function build(ts) {
     { type: 'edge', atTx: 158, kinds: ['smoothie', 'runner', 'smoothie'], interval: 0.8 },
   ];
   m.locks = [
-    { tx0: 6, tx1: 23, waves: [['runner', 'runner'], ['smoothie', 'runner', 'runner']] },
-    { tx0: 57, tx1: 75, waves: [['runner', 'smoothie', 'runner'], ['runner', 'runner', 'smoothie', 'runner']] },
-    { tx0: 157, tx1: 171, waves: [['smoothie', 'runner', 'runner'], ['runner', 'smoothie', 'runner', 'smoothie'], ['runner', 'runner', 'runner']] },
+    { tx0: 6, tx1: 23, waves: [['runner', 'runner'], ['smoothie', 'runner']] },
+    { tx0: 57, tx1: 75, waves: [['runner', 'smoothie'], ['runner', 'runner', 'smoothie']] },
+    { tx0: 157, tx1: 171, waves: [['smoothie', 'runner', 'runner'], ['runner', 'smoothie', 'runner']] },
   ];
   return m;
 }

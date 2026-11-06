@@ -82,11 +82,11 @@ test('неизвестный вид — ошибка', () => {
 
 test('характеристики видов — по таблице SPEC §6', () => {
   const spec = {
-    runner: [20, 100, 10],
-    cyclist: [30, 200, 20],
-    moto: [60, 240, 30],
-    yoga: [40, 40, 5],
-    smoothie: [25, 60, 0],
+    runner: [20, 70, 10],
+    cyclist: [30, 140, 20],
+    moto: [60, 170, 30],
+    yoga: [40, 30, 5],
+    smoothie: [25, 45, 0],
   };
   for (const [kind, [hp, speed, touch]] of Object.entries(spec)) {
     assert.deepEqual([ZOZNIKI[kind].health, ZOZNIKI[kind].speed, ZOZNIKI[kind].touchDamage], [hp, speed, touch], kind);
@@ -300,4 +300,58 @@ test('Пиво 0,0 выпадает с шансом 10%', () => {
   let n = 0;
   for (let i = 0; i < 10000; i++) if (rollDrop(rng)) n++;
   assert.ok(n > 850 && n < 1150, `выпало ${n} из 10000`);
+});
+
+test('Зожник не проходит сквозь Никича: упирается и бьёт касанием', async () => {
+  const { separateFromBody, touching, recoil } = await import('../src/zozniki.js');
+  const { CONTACT } = await import('../src/config.js');
+  const map = level(30);
+  const t = target(10);
+  const z = spawnAt('runner', 20);
+  for (let i = 0; i < 240; i++) {
+    updateZoznik(z, DT, map, PHYSICS, t, ZOZNIKI, () => 0);
+    separateFromBody(z, t, map);
+    assert.ok(!(z.body.x < t.x + t.w - 0.01 && z.body.x + z.body.w > t.x + 0.01), `кадр ${i}: насквозь`);
+  }
+  assert.ok(touching(z.body, t), 'стоит вплотную');
+  assert.equal(contactDamage(z, t), ZOZNIKI.runner.touchDamage);
+  recoil(z, t);
+  assert.ok(z.body.vx > 0, 'отскок от Никича');
+  assert.equal(contactDamage(z, t), 0, 'сразу снова не бьёт');
+  sim(z, map, t, Math.ceil(CONTACT.hitCooldown / DT) + 1);
+  separateFromBody(z, t, map);
+  assert.equal(contactDamage(z, t), ZOZNIKI.runner.touchDamage, 'после паузы снова опасен');
+});
+
+test('Зожник у стены не продавливается — отодвигается Никич', async () => {
+  const { separateFromBody } = await import('../src/zozniki.js');
+  const map = level(30, (r) => { for (let y = 0; y < 7; y++) put(r, 12, y, '#'); });
+  const z = spawnAt('runner', 11);
+  const t = target(11);
+  t.x = z.body.x + 2;
+  separateFromBody(z, t, map);
+  assert.ok(t.x >= z.body.x + z.body.w - 0.01 || t.x + t.w <= z.body.x + 0.01);
+  assert.ok(z.body.x + z.body.w <= 12 * TS + 0.01, 'Зожник не в стене');
+});
+
+test('Никич над головой Зожника не расталкивается — его можно перепрыгнуть', async () => {
+  const { separateFromBody } = await import('../src/zozniki.js');
+  const map = level(30);
+  const z = spawnAt('runner', 10);
+  const t = createBody(z.body.x, z.body.y - 20, 10, 22);
+  assert.equal(separateFromBody(z, t, map), false);
+});
+
+test('Бегун спрыгивает с уступа к Никичу, но не в Яму', async () => {
+  const ledge = level(30, (r) => { for (let x = 15; x < 30; x++) { put(r, x, 4, '#'); put(r, x, 5, '#'); put(r, x, 6, '#'); } });
+  const z = createZoznik('runner', 20 * TS, 4 * TS - ZOZNIKI.runner.h);
+  const t = target(5);
+  sim(z, ledge, t, 300);
+  assert.ok(z.body.y + z.body.h >= 7 * TS - 0.5, 'спустился на землю');
+  assert.ok(z.body.x < 15 * TS, 'дошёл до Никича');
+  const pit = level(30, (r) => { put(r, 10, 7, '.'); put(r, 11, 7, '.'); put(r, 12, 7, '.'); });
+  const r2 = spawnAt('runner', 16);
+  sim(r2, pit, target(5), 300);
+  assert.equal(fellOut(r2.body, pit), false);
+  assert.ok(r2.body.x > 12 * TS, 'стоит у Ямы');
 });

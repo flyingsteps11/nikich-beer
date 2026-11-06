@@ -241,9 +241,9 @@ test('Запертые волны: 2–3 на Уровнях 1–4, без Ям 
       for (let tx = l.tx0; tx <= l.tx1; tx++) assert.equal(map.get(tx, map.height - 1), TILE.SOLID, `Яма в ${tx}`);
       for (const c of map.checkpoints) assert.ok(c.tx < l.tx0 || c.tx > l.tx1, `точка ${c.tx} внутри`);
       assert.ok(l.tx0 * TS > map.spawn.x && l.tx1 < map.exit.tx, 'между стартом и выходом');
-      assert.ok(l.waves.length >= 2 && l.waves.length <= 3);
+      assert.equal(l.waves.length, 2, 'две короткие волны');
       for (const wave of l.waves) {
-        assert.ok(wave.length >= 2 && wave.length <= 5);
+        assert.ok(wave.length >= 2 && wave.length <= 3, `волна из ${wave.length}`);
         for (const k of wave) assert.ok(kinds.has(k), `${k} не водится на Уровне ${i + 1}`);
       }
     }

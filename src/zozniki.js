@@ -1,7 +1,7 @@
 // Зожники (SPEC §6): виды, поведение, появление. Чистая логика, без DOM.
 
-import { TILE, createBody, stepPlatformer, isBlocking } from './physics.js';
-import { ZOZNIKI, HIT_FLASH_TIME, SPAWN, DROPS, TILE_SIZE } from './config.js';
+import { TILE, createBody, stepPlatformer, isBlocking, moveX } from './physics.js';
+import { ZOZNIKI, HIT_FLASH_TIME, SPAWN, DROPS, TILE_SIZE, CONTACT } from './config.js';
 
 const IDLE = Object.freeze({ move: 0, jumpPressed: false, jumpHeld: true, dropHeld: false });
 
@@ -36,6 +36,7 @@ export function createZoznik(kind, x, y, K = ZOZNIKI) {
     lectureCd: 0,
     throwCd: (k.throwCooldown ?? 0) / 2,
     ramCd: 0, // с, пока Самокат не может сбить снова
+    hitCd: 0,
   };
 }
 
@@ -149,8 +150,19 @@ function walk(z, dir, map, k, canJump) {
     return IDLE;
   }
   // Запас на тормозной путь: остановиться до края, а не повиснуть над Ямой
-  if (!groundAhead(b, dir, map, 1 + Math.abs(b.vx) * 0.1)) return IDLE;
+  const ahead = 1 + Math.abs(b.vx) * 0.1;
+  if (!groundAhead(b, dir, map, ahead) && dropAhead(b, dir, map, ahead) > (k.maxDropTiles ?? 0)) return IDLE;
   return intent(dir);
+}
+
+export function dropAhead(body, dir, map, ahead = 1, limit = 8) {
+  const ts = map.tileSize;
+  const tx = Math.floor((dir > 0 ? body.x + body.w + ahead : body.x - ahead) / ts);
+  const feetRow = Math.floor((body.y + body.h + 1) / ts);
+  for (let d = 0; d <= limit; d++) {
+    if (isStandable(map.get(tx, feetRow + d))) return d;
+  }
+  return Infinity;
 }
 
 // ---------- Поведение видов ----------
@@ -205,7 +217,7 @@ const BRAINS = {
     if (dist < k.minDistance) move = -(Math.sign(dx) || 1);
     else if (dist > k.maxDistance) move = Math.sign(dx);
     if (z.throwCd <= 0 && Math.hypot(dx, dy) <= k.throwRange) {
-      events.push({ type: 'throw', shot: makeSmoothie(z, k, t) });
+      events.push({ type: 'throw', shot: { ...makeSmoothie(z, k, t), owner: z } });
       z.throwCd = k.throwCooldown;
     }
     const it = walk(z, move, map, k, false);
@@ -299,7 +311,7 @@ export function updateEnemyShots(shots, dt, map, targetBody) {
     if (isBlocking(map.get(Math.floor(s.x / ts), Math.floor(s.y / ts)))) { s.alive = false; continue; }
     const b = targetBody;
     if (b && s.x >= b.x - 2 && s.x <= b.x + b.w + 2 && s.y >= b.y - 2 && s.y <= b.y + b.h + 2) {
-      hits.push({ damage: s.damage, x: s.x, y: s.y });
+      hits.push({ damage: s.damage, x: s.x, y: s.y, owner: s.owner ?? null });
       s.alive = false;
     }
   }
@@ -310,10 +322,43 @@ export function updateEnemyShots(shots, dt, map, targetBody) {
 }
 
 // Урон касанием (0 — если не касается, оглушён или вид не бьёт касанием)
-export function contactDamage(z, body, K = ZOZNIKI) {
+export function contactDamage(z, body, K = ZOZNIKI, C = CONTACT) {
   const k = K[z.kind];
-  if (!canAct(z) || !k.touchDamage) return 0;
-  return overlaps(z.body, body) ? k.touchDamage : 0;
+  if (!canAct(z) || !k.touchDamage || z.hitCd > 0) return 0;
+  return touching(z.body, body, C) ? k.touchDamage : 0;
+}
+
+export function touching(a, b, C = CONTACT) {
+  const m = C.touchMargin;
+  return a.x - m < b.x + b.w && a.x + a.w + m > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+export function separateFromBody(z, body, map, C = CONTACT) {
+  const a = z.body;
+  if (!z.alive || !overlaps(a, body)) return false;
+  const vertical = Math.min(a.y + a.h, body.y + body.h) - Math.max(a.y, body.y);
+  if (vertical < C.minVerticalOverlap) return false;
+  const dir = Math.sign(a.x + a.w / 2 - (body.x + body.w / 2)) || -z.dir || 1;
+  const overlap = dir > 0 ? body.x + body.w - a.x : a.x + a.w - body.x;
+  const before = a.x;
+  moveX(a, dir * overlap, map);
+  const left = overlap - Math.abs(a.x - before);
+  if (left > 1e-3) moveX(body, -dir * left, map);
+  if (Math.sign(a.vx) === -dir) a.vx = 0;
+  return true;
+}
+
+export function recoil(z, fromBody, C = CONTACT) {
+  const dir = Math.sign(z.body.x + z.body.w / 2 - (fromBody.x + fromBody.w / 2)) || -z.dir || 1;
+  z.body.vx = dir * C.recoilX;
+  z.body.vy = -C.recoilY;
+  z.body.onGround = false;
+  z.hitCd = C.hitCooldown;
+  stunZoznik(z, C.recoilStun);
+  if (z.state === 'dash') {
+    z.state = 'brake';
+    z.timer = ZOZNIKI[z.kind].brakeTime;
+  }
 }
 
 // ---------- Шаг Зожника ----------
@@ -335,6 +380,7 @@ export function updateZoznik(z, dt, map, P, target = null, K = ZOZNIKI, rng = Ma
   z.lectureCd = Math.max(0, z.lectureCd - dt);
   z.throwCd = Math.max(0, z.throwCd - dt);
   z.ramCd = Math.max(0, z.ramCd - dt);
+  z.hitCd = Math.max(0, z.hitCd - dt);
 
   let it = IDLE;
   if (canAct(z) && target) {

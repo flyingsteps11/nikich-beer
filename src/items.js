@@ -1,7 +1,7 @@
 // Предметы (SPEC §7): Бонусы, ловушка Пиво 0,0, Самокат. Чистая логика, без DOM.
 
 import { createBody, stepPlatformer } from './physics.js';
-import { heal, loseHealth, mountScooter, isRiding } from './nikich.js';
+import { heal, mountScooter, isRiding } from './nikich.js';
 import { ITEMS, DROPS } from './config.js';
 
 export const ITEM_TYPES = Object.freeze(['hotdog', 'vodka', 'cigarette', 'chip', 'beerZero', 'scooter']);
@@ -80,7 +80,7 @@ export function collectItems(items, n, I = ITEMS) {
   return picked;
 }
 
-// run: { timer, score, stats } — состояние прохождения Уровня.
+// run: { timer, stats } — состояние прохождения Уровня.
 // Возвращает: floater — подпись над Никичем, speech — ключ реплики в LINES, lifeLost, gameOver.
 export function applyItem(n, type, run, I = ITEMS) {
   const res = { type, floater: null, speech: null, lifeLost: false, gameOver: false };
@@ -96,25 +96,20 @@ export function applyItem(n, type, run, I = ITEMS) {
       res.floater = `+${Math.round((I.vodka.damageMul - 1) * 100)}%`;
       break;
     case 'cigarette':
+      n.effects.smoke = I.cigarette.boostTime;
       if (!run.timer) break; // Уровень без таймера — перекур просто так
       run.timer.left += I.cigarette.time;
       res.floater = `+${I.cigarette.time} с`;
       break;
     case 'chip':
-      run.score += I.chip.score;
-      res.floater = `+${I.chip.score}`;
+      n.effects.luck = I.chip.luckTime;
       res.speech = 'chip';
       break;
-    case 'beerZero': {
-      const dmg = I.beerZero.damage * n.mods.beerDamageMul;
-      const r = loseHealth(n, dmg);
-      if (!r.lifeLost) n.effects.beer = I.beerZero.duration;
-      res.floater = `-${Math.round(dmg)}`;
+    case 'beerZero':
+      n.drunk = Math.min(I.beerZero.maxStacks, n.drunk + 1);
+      n.effects.beer = I.beerZero.duration * n.mods.beerTimeMul;
       res.speech = 'beerZero';
-      res.lifeLost = r.lifeLost;
-      res.gameOver = r.gameOver;
       break;
-    }
     case 'scooter':
       mountScooter(n, I);
       res.speech = 'scooter';

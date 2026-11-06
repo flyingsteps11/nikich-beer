@@ -118,7 +118,7 @@ export function stepPlatformer(body, intent, dt, map, P, mods = {}) {
   else accel = intent.move !== 0 ? P.airAccel : P.airDecel;
   // Разворот на земле — сразу с тормозным ускорением, чтобы не «скользить»
   if (body.onGround && intent.move !== 0 && Math.sign(body.vx) === -intent.move) accel = P.groundDecel + P.groundAccel;
-  body.vx = approach(body.vx, target, accel * speedMul * dt);
+  body.vx = approach(body.vx, target, accel * speedMul * (mods.accelMul ?? 1) * dt);
 
   // Таймеры прыжка
   if (body.onGround) {

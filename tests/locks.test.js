@@ -106,3 +106,10 @@ test('потеря жизни: непройденная Запертая вол�
   const ev = run(locks, map, 30 * TS, DT);
   assert.equal(ev[0].type, 'start');
 });
+
+test('застряли Зожники — волна не держит дольше предела', () => {
+  const map = strip();
+  const locks = createLocks(map);
+  const ev = run(locks, map, 30 * TS, LOCKS.waveTimeout + 1, 2);
+  assert.ok(ev.some((e) => e.type === 'release'));
+});

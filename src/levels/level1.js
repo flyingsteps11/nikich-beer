@@ -10,12 +10,15 @@ const G = 15; // верхний ряд земли
 const FEET = G - 1; // ряд, в котором стоят ноги на земле
 
 export const THEME = {
-  sky: ['#3d2c5e', '#f4a261'],
+  tiles: 'wola',
+  time: 'morning',
+  props: [{ type: 'tree', weight: 4 }, { type: 'lamp', weight: 2 }, { type: 'bin', weight: 2 }, { type: 'bench', weight: 2 }, { type: 'busStop', weight: 1 }, { type: 'column', weight: 1 }, { type: 'veturilo', weight: 1 }, { type: 'kiosk', weight: 1 }, { type: 'recycle', weight: 1 }, { type: 'shop', weight: 3 }, { type: 'citylight', weight: 2 }, { type: 'posterWall', weight: 1 }, { type: 'zabka', weight: 1, min: 2 }],
   layers: [
-    { factor: 0.12, base: 40, color: '#6a5a8a', windows: null, fill: 'blocks',
-      landmarks: [{ type: 'spire', at: 0.55, scale: 0.45 }, { type: 'varso', at: 0.72, scale: 0.5 }] },
-    { factor: 0.3, base: 34, color: '#46396a', windows: '#ffd166', fill: 'blocks' },
-    { factor: 0.55, base: 30, color: '#2a2142', fill: 'trees' },
+    { factor: 0.1, base: 52, tone: 'far', fill: 'glass',
+      landmarks: [{ type: 'crane', at: 0.25, scale: 0.6 }, { type: 'varso', at: 0.6, scale: 0.55 }, { type: 'spire', at: 0.78, scale: 0.5 }] },
+    { factor: 0.3, base: 36, tone: 'mid', fill: 'apartments',
+      landmarks: [{ type: 'crane', at: 0.55, scale: 0.75, behind: true }] },
+    { factor: 0.55, base: 30, tone: 'near', fill: 'trees' },
   ],
 };
 
@@ -106,8 +109,8 @@ export function build(ts) {
   ];
   m.locks = [
     { tx0: 30, tx1: 52, waves: [['runner', 'runner'], ['runner', 'runner', 'runner']] },
-    { tx0: 80, tx1: 104, waves: [['runner', 'runner', 'runner'], ['runner', 'runner', 'runner', 'runner']] },
-    { tx0: 122, tx1: 146, waves: [['runner', 'runner', 'runner'], ['runner', 'runner', 'runner'], ['runner', 'runner', 'runner', 'runner']] },
+    { tx0: 80, tx1: 104, waves: [['runner', 'runner'], ['runner', 'runner', 'runner']] },
+    { tx0: 122, tx1: 146, waves: [['runner', 'runner', 'runner'], ['runner', 'runner', 'runner']] },
   ];
   return m;
 }

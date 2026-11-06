@@ -22,7 +22,7 @@ const EFFECTS = Object.freeze({
   'angry-dog': (n, U) => { n.mods.dogHoldBonus += U.angryDog.dogHoldBonus; },
   'magnet': (n, U) => { n.mods.magnetRadius = Math.max(n.mods.magnetRadius, U.magnet.radius); },
   'renter': (n, U) => { n.mods.extraScooters += U.renter.extraScooters; },
-  'iron-liver': (n, U) => { n.mods.beerDamageMul *= U.ironLiver.beerDamageMul; },
+  'iron-liver': (n, U) => { n.mods.beerTimeMul *= U.ironLiver.beerTimeMul; },
   'five-zero': (n, U) => { n.mods.stunRadiusMul *= U.fiveZero.stunRadiusMul; },
   'bouncy': (n, U) => { n.mods.airJumps += U.bouncy.airJumps; },
 });

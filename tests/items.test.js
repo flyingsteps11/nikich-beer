@@ -35,7 +35,7 @@ function nikichAt(map, tx) {
 }
 
 function newRun() {
-  return { timer: createTimer(180), score: 0, stats: { kills: 0, shots: 0, deaths: 0 } };
+  return { timer: createTimer(180), stats: { kills: 0, shots: 0, deaths: 0 } };
 }
 
 function run(n, map, intent, frames) {
@@ -87,51 +87,118 @@ test('Сигарета: +15 с к таймеру', () => {
   assert.equal(r.timer.left, 25);
 });
 
+test('Сигарета: Затяжка — быстрее бег, выше прыжок, чаще Щелбан, потом проходит', () => {
+  const map = arena();
+  const C = ITEMS.cigarette;
+  const plain = nikichAt(map, 20);
+  const normalJump = jumpHeight(nikichAt(map, 30), map);
+  const n = nikichAt(map, 5);
+  applyItem(n, 'cigarette', newRun());
+  assert.equal(n.effects.smoke, C.boostTime);
+  assert.ok(Math.abs(movementMods(n).speedMul - C.speedMul) < 1e-9);
+  assert.ok(jumpHeight(nikichAt(map, 5), map) > 0);
+  const fast = nikichAt(map, 10);
+  applyItem(fast, 'cigarette', newRun());
+  assert.ok(jumpHeight(fast, map) > normalJump * 1.15, 'прыжок выше');
+  tryShoot(plain);
+  tryShoot(n);
+  assert.ok(Math.abs(n.cooldowns.shot - plain.cooldowns.shot / C.shotRateMul) < 1e-9, 'Щелбан чаще');
+  run(n, map, IDLE, Math.ceil(C.boostTime * 60) + 1);
+  assert.equal(n.effects.smoke, 0);
+  assert.equal(movementMods(n).speedMul, 1);
+});
+
 test('Сигарета на Уровне без таймера ничего не ломает', () => {
   const r = { ...newRun(), timer: null };
   const res = applyItem(createNikich(0, 0), 'cigarette', r);
   assert.equal(res.floater, null);
 });
 
-test('Покерная фишка: +100 очков и «Легендарная игра»', () => {
-  const r = newRun();
-  const res = applyItem(createNikich(0, 0), 'chip', r);
-  assert.equal(r.score, 100);
+test('Покерная фишка: Удача на время и «Легендарная игра»', () => {
+  const n = createNikich(0, 0);
+  const res = applyItem(n, 'chip', newRun());
+  assert.equal(n.effects.luck, ITEMS.chip.luckTime);
   assert.equal(res.speech, 'chip');
+  assert.equal(res.floater, null);
 });
 
 // ---------- Пиво 0,0 ----------
 
-test('Пиво 0,0: −15 здоровья, медленнее на 40% и прыжок ниже на 4 с', () => {
+test('Пиво 0,0: здоровье не трогает, Никич медленнее и прыгает ниже, потом трезвеет', () => {
   const map = arena();
+  const B = ITEMS.beerZero;
   const n = nikichAt(map, 5);
   const normalJump = jumpHeight(nikichAt(map, 20), map);
   const res = applyItem(n, 'beerZero', newRun());
-  assert.equal(n.health, 85);
+  assert.equal(n.health, n.maxHealth);
+  assert.equal(res.lifeLost, false);
   assert.equal(res.speech, 'beerZero');
-  assert.ok(Math.abs(movementMods(n).speedMul - 0.6) < 1e-9);
+  assert.equal(n.drunk, 1);
+  assert.ok(Math.abs(movementMods(n).speedMul - (1 - B.speedPerStack)) < 1e-9);
   run(n, map, RUN, 90);
-  assert.ok(Math.abs(n.body.vx - PHYSICS.runSpeed * 0.6) < 1e-6, `vx ${n.body.vx}`);
-  const lowJump = jumpHeight(n, map);
-  assert.ok(lowJump < normalJump * 0.7, `${lowJump} против ${normalJump}`);
-  run(n, map, IDLE, 4 * 60);
-  assert.equal(movementMods(n).speedMul, 1, 'через 4 с прошло');
+  assert.ok(Math.abs(n.body.vx - PHYSICS.runSpeed * (1 - B.speedPerStack)) < 1e-6, `vx ${n.body.vx}`);
+  assert.ok(jumpHeight(n, map) < normalJump, 'прыжок ниже');
+  run(n, map, IDLE, Math.ceil(B.duration * 60) + 2);
+  assert.equal(n.drunk, 0);
+  assert.equal(movementMods(n).speedMul, 1, 'протрезвел');
 });
 
-test('Пиво 0,0 может отнять последнюю жизнь', () => {
-  const n = createNikich(0, 0);
-  n.health = 10;
-  n.lives = 1;
-  const res = applyItem(n, 'beerZero', newRun());
-  assert.equal(res.lifeLost, true);
-  assert.equal(res.gameOver, true);
+test('Пиво 0,0 подряд: опьянение копится до предела и уходит по уровню', () => {
+  const map = arena();
+  const B = ITEMS.beerZero;
+  const one = nikichAt(map, 5);
+  applyItem(one, 'beerZero', newRun());
+  const n = nikichAt(map, 5);
+  for (let i = 0; i < B.maxStacks + 2; i++) applyItem(n, 'beerZero', newRun());
+  assert.equal(n.drunk, B.maxStacks);
+  assert.ok(movementMods(n).speedMul < movementMods(one).speedMul, 'пьянее — медленнее');
+  assert.ok(movementMods(n).accelMul < movementMods(one).accelMul, 'и разгон вязче');
+  run(n, map, IDLE, Math.ceil(B.duration * 60) + 1);
+  assert.equal(n.drunk, B.maxStacks - 1);
+  run(n, map, IDLE, Math.ceil(B.stackTime * 60) + 1);
+  assert.equal(n.drunk, B.maxStacks - 2);
 });
 
-test('«Железная печень» вдвое ослабляет Пиво 0,0', () => {
-  const n = createNikich(0, 0);
-  n.mods.beerDamageMul = 0.5;
+test('Пиво 0,0: вялый разгон — до полной скорости дольше', () => {
+  const map = arena();
+  const sober = nikichAt(map, 5);
+  const drunk = nikichAt(map, 5);
+  applyItem(drunk, 'beerZero', newRun());
+  run(sober, map, RUN, 4);
+  run(drunk, map, RUN, 4);
+  assert.ok(drunk.body.vx < sober.body.vx * 0.7, `${drunk.body.vx} против ${sober.body.vx}`);
+});
+
+test('Пиво 0,0: Щелбан сильнее, удары Зожников слабее', () => {
+  const B = ITEMS.beerZero;
+  const n = createNikich(100, 100);
   applyItem(n, 'beerZero', newRun());
-  assert.equal(n.health, 92.5);
+  applyItem(n, 'beerZero', newRun());
+  const shot = tryShoot(n);
+  assert.ok(Math.abs(shot.damage - ATTACKS.shot.damage * (1 + 2 * B.shotDamagePerStack)) < 1e-9);
+  takeDamage(n, 20, 0);
+  assert.ok(Math.abs(n.health - (n.maxHealth - 20 * (1 - 2 * B.armorPerStack))) < 1e-9, `здоровье ${n.health}`);
+});
+
+test('Пиво 0,0: прицел догоняет курсор с запаздыванием, трезвый — сразу', async () => {
+  const { steerAim } = await import('../src/nikich.js');
+  const sober = createNikich(100, 100);
+  steerAim(sober, 100, 300, DT);
+  assert.ok(sober.aim.y > 0.99, 'трезвый смотрит вниз сразу');
+  const drunk = createNikich(100, 100);
+  applyItem(drunk, 'beerZero', newRun());
+  steerAim(drunk, 100, 300, DT);
+  assert.ok(drunk.aim.y < 0.3, 'один кадр — почти не повернулся');
+  for (let i = 0; i < 90; i++) steerAim(drunk, 100, 300, DT);
+  assert.ok(drunk.aim.y > 0.95, 'за 1,5 с довернулся');
+});
+
+test('«Железная печень» вдвое укорачивает Пиво 0,0', () => {
+  const n = createNikich(0, 0);
+  n.mods.beerTimeMul = 0.5;
+  applyItem(n, 'beerZero', newRun());
+  assert.equal(n.effects.beer, ITEMS.beerZero.duration / 2);
+  assert.equal(n.health, n.maxHealth);
 });
 
 // ---------- Самокат ----------
@@ -220,11 +287,11 @@ test('пока Никич на Самокате, второй Самокат н�
 
 test('потеря жизни сбрасывает эффекты Предметов', () => {
   const n = createNikich(0, 0);
-  n.effects = { vodka: 5, beer: 3, scooter: 7 };
+  n.effects = { vodka: 5, beer: 3, scooter: 7, luck: 0 };
   n.health = 5;
   const r = takeDamage(n, 10, 0);
   assert.equal(r.lifeLost, true);
-  assert.deepEqual(n.effects, { vodka: 0, beer: 0, scooter: 0 });
+  assert.deepEqual(n.effects, { vodka: 0, beer: 0, scooter: 0, smoke: 0, luck: 0 });
 });
 
 // ---------- Предметы на карте и выпадение ----------

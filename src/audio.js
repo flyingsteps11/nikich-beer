@@ -1,8 +1,7 @@
 import { VOICE } from './config.js';
-import { VOICE_LINES } from './lines.js';
 
-export function voiceClips(V = VOICE, lines = VOICE_LINES) {
-  return [...new Set([...Object.values(lines), ...Object.values(V.groups).flat()])];
+export function voiceClips(V = VOICE) {
+  return [...new Set(Object.values(V.groups).flat())];
 }
 
 function readMuted(storage, key) {
@@ -22,16 +21,15 @@ function writeMuted(storage, key, muted) {
 }
 
 export class Voice {
-  constructor({ V = VOICE, lines = VOICE_LINES, storage = null, rng = Math.random } = {}) {
+  constructor({ V = VOICE, storage = null, rng = Math.random } = {}) {
     this.V = V;
-    this.lines = lines;
     this.storage = storage;
     this.rng = rng;
     this.ctx = null;
     this.gain = null;
     this.buffers = new Map();
     this.current = null;
-    this.gruntUntil = 0;
+    this.readyAt = {};
     this.muted = readMuted(storage, V.muteKey);
   }
 
@@ -44,7 +42,7 @@ export class Voice {
     } catch {
       return;
     }
-    for (const name of voiceClips(this.V, this.lines)) {
+    for (const name of voiceClips(this.V)) {
       fetchFn(`${this.V.dir}${name}.wav`)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.statusText))))
         .then((data) => decoder.decodeAudioData(data))
@@ -69,15 +67,18 @@ export class Voice {
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
   }
 
-  play(name, { rate = 1, priority = 1 } = {}) {
+  now() {
+    return this.ctx ? this.ctx.currentTime : 0;
+  }
+
+  play(name, priority = 1) {
     if (this.muted || !this.ctx || this.ctx.state === 'closed') return false;
     const buf = this.buffers.get(name);
     if (!buf) return false;
-    if (this.current && this.current.priority > priority) return false;
+    if (this.current && this.current.priority >= priority) return false;
     this.stop();
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
-    src.playbackRate.value = rate;
     src.connect(this.gain);
     const cur = { src, priority };
     src.onended = () => {
@@ -99,31 +100,13 @@ export class Voice {
     }
   }
 
-  line(text, opts = {}) {
-    const name = this.lines[text];
-    return name ? this.play(name, { priority: this.V.priority.line, ...opts }) : false;
-  }
-
-  group(key, { priority = this.V.priority.grunt } = {}) {
+  group(key) {
     const clips = this.V.groups[key];
-    if (!clips || this.rng() >= (this.V.chance[key] ?? 1)) return false;
-    return this.play(clips[Math.floor(this.rng() * clips.length)], { priority });
-  }
-
-  grunt(key) {
-    const now = this.ctx ? this.ctx.currentTime : 0;
-    if (now < this.gruntUntil) return false;
-    const played = this.group(key);
-    if (played) this.gruntUntil = now + this.V.gruntCooldown;
+    const now = this.now();
+    if (!clips || now < (this.readyAt[key] ?? 0)) return false;
+    const played = this.play(clips[Math.floor(this.rng() * clips.length)], this.V.priority[key] ?? 1);
+    if (played) this.readyAt[key] = now + (this.V.cooldown[key] ?? 0);
     return played;
-  }
-
-  speak(text, key) {
-    return this.line(text) || this.group(key);
-  }
-
-  event(key) {
-    return this.group(key, { priority: this.V.priority.event });
   }
 
   toggleMute() {

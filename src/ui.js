@@ -2,6 +2,9 @@
 
 import { SCREEN } from './config.js';
 import { UI, UPGRADE_TEXT } from './lines.js';
+import { WOW, WOW_FONT, drawDialog, drawButton, drawChatBubble, drawIcon } from './wow.js';
+
+export { WOW, WOW_FONT };
 
 const W = SCREEN.width;
 const H = SCREEN.height;
@@ -14,38 +17,40 @@ export const COLORS = Object.freeze({
   shadow: '#0b0b10',
 });
 
-export function drawText(ctx, text, x, y, { size = 8, color = COLORS.text, align = 'left', shadow = true, bold = false } = {}) {
-  ctx.font = `${bold ? 'bold ' : ''}${size}px monospace`;
+export function drawText(ctx, text, x, y, { size = 8, color = COLORS.text, align = 'left', shadow = true, bold = false, font = 'monospace', outline = 0 } = {}) {
+  ctx.font = `${bold ? 'bold ' : ''}${size}px ${font}`;
   ctx.textAlign = align;
   ctx.textBaseline = 'top';
   if (shadow) {
     ctx.fillStyle = COLORS.shadow;
     ctx.fillText(text, Math.round(x) + 1, Math.round(y) + 1);
   }
+  if (outline) {
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = outline;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)';
+    ctx.strokeText(text, Math.round(x), Math.round(y));
+  }
   ctx.fillStyle = color;
   ctx.fillText(text, Math.round(x), Math.round(y));
 }
 
-// Табличка Подсказки на Уровне: x — центр, y — низ таблички (экранные координаты)
-export function drawSign(ctx, text, x, y) {
-  ctx.font = '7px monospace';
-  const w = Math.ceil(ctx.measureText(text).width) + 8;
-  const bx = Math.round(x - w / 2);
-  const by = Math.round(y - 12);
-  ctx.fillStyle = 'rgba(11, 11, 16, 0.7)';
-  ctx.fillRect(bx, by, w, 12);
-  ctx.fillStyle = COLORS.accent;
-  ctx.fillRect(bx, by + 11, w, 1);
-  drawText(ctx, text, x, by + 2, { size: 7, align: 'center', shadow: false });
+function wowText(ctx, text, x, y, opts = {}) {
+  drawText(ctx, text, x, y, { font: WOW_FONT, outline: 1, color: WOW.white, ...opts, bold: false });
 }
 
-// Название Уровня на старте; alpha — для затухания
+export function drawWowPanel(ctx, x, y, w, h, title = null) {
+  drawDialog(ctx, x, y, w, h, title);
+}
+
+export function drawWowButton(ctx, box, label, selected = false, time = 0) {
+  drawButton(ctx, box, label, { selected, time, size: Math.min(8, box.h * 0.55) });
+}
+
 export function drawLevelBanner(ctx, label, name, alpha) {
   ctx.globalAlpha = Math.max(0, alpha);
-  ctx.fillStyle = 'rgba(11, 11, 16, 0.6)';
-  ctx.fillRect(0, H / 2 - 52, W, 34);
-  drawText(ctx, label, W / 2, H / 2 - 49, { size: 8, color: COLORS.muted, align: 'center' });
-  drawText(ctx, name, W / 2, H / 2 - 39, { size: 14, color: COLORS.accent, align: 'center', bold: true });
+  wowText(ctx, name, W / 2, H / 2 - 56, { size: 20, color: WOW.gold, align: 'center', bold: true, outline: 2 });
+  wowText(ctx, label, W / 2, H / 2 - 32, { size: 9, color: WOW.white, align: 'center', outline: 1.4 });
   ctx.globalAlpha = 1;
 }
 
@@ -75,8 +80,9 @@ export function drawPhoto(ctx, img, x, y, w, h, scale = 1) {
   ctx.fillRect(px - 2, py - 2, w * scale + 4, h * scale + 4);
   if (img) {
     ctx.imageSmoothingEnabled = w * scale * ctx.getTransform().a < img.naturalWidth;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = 'medium';
     ctx.drawImage(img, px, py, w * scale, h * scale);
+    ctx.imageSmoothingQuality = 'low';
     ctx.imageSmoothingEnabled = false;
   } else {
     ctx.fillStyle = '#2a2a3a';
@@ -87,7 +93,7 @@ export function drawPhoto(ctx, img, x, y, w, h, scale = 1) {
 
 // Пункты меню титульного экрана: прямоугольники для мыши и отрисовки
 export function menuItemRect(i) {
-  return { x: W / 2 - 90, y: H / 2 + 2 + i * 20, w: 180, h: 16 };
+  return { x: W / 2 - 70, y: H / 2 + 2 + i * 20, w: 140, h: 16 };
 }
 
 export function inRect(r, x, y) {
@@ -101,24 +107,18 @@ export function drawTitle(ctx, time, menu) {
   const bob = Math.round(Math.sin(time * 2) * 2);
   if (menu.face) drawPhoto(ctx, menu.face.img, 30, 70 + bob, menu.face.w, menu.face.h);
   if (menu.gman) drawPhoto(ctx, menu.gman.img, W - 30 - menu.gman.w, 70 - bob, menu.gman.w, menu.gman.h);
-  drawText(ctx, UI.title, W / 2, H / 2 - 50, { size: 16, color: COLORS.accent, align: 'center', bold: true });
-  if (menu.question) drawText(ctx, menu.question, W / 2, H / 2 - 18, { color: '#e63946', align: 'center' });
-  else if (menu.note) drawText(ctx, menu.note, W / 2, H / 2 - 18, { size: 7, color: COLORS.muted, align: 'center' });
-  menu.items.forEach((label, i) => {
-    const r = menuItemRect(i);
-    const sel = i === menu.selected;
-    if (sel) {
-      ctx.fillStyle = 'rgba(244, 211, 94, 0.15)';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-    }
-    const text = sel ? `> ${label} <` : label;
-    drawText(ctx, text, W / 2, r.y + 4, { align: 'center', color: sel ? COLORS.accent : COLORS.text, bold: sel });
-  });
-  drawText(ctx, UI.menuHint, W / 2, H - 16, { size: 7, color: COLORS.muted, align: 'center' });
+  wowText(ctx, UI.title, W / 2, H / 2 - 62, { size: 20, color: WOW.gold, align: 'center', bold: true, outline: 2 });
+  const last = menuItemRect(menu.items.length - 1);
+  const top = H / 2 - (menu.question || menu.note ? 28 : 8);
+  drawWowPanel(ctx, W / 2 - 86, top, 172, last.y + last.h + 10 - top);
+  if (menu.question) wowText(ctx, menu.question, W / 2, H / 2 - 18, { size: 8, color: WOW.red, align: 'center' });
+  else if (menu.note) wowText(ctx, menu.note, W / 2, H / 2 - 18, { size: 7, color: WOW.grey, align: 'center' });
+  menu.items.forEach((label, i) => drawWowButton(ctx, menuItemRect(i), label, i === menu.selected, time));
+  wowText(ctx, UI.menuHint, W / 2, H - 16, { size: 7, color: WOW.grey, align: 'center' });
 }
 
 // Карточки выбора Улучшения
-const CARD = Object.freeze({ w: 140, h: 112, gap: 10, y: 58 });
+const CARD = Object.freeze({ w: 140, h: 132, gap: 10, y: 46 });
 
 export function upgradeCardRect(i, count = 3) {
   const x0 = (W - (count * CARD.w + (count - 1) * CARD.gap)) / 2;
@@ -126,46 +126,78 @@ export function upgradeCardRect(i, count = 3) {
 }
 
 export function drawUpgradeChoice(ctx, ids, selected, ready, time) {
-  ctx.fillStyle = 'rgba(11, 11, 16, 0.88)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
   ctx.fillRect(0, 0, W, H);
-  drawText(ctx, UI.upgradeTitle, W / 2, 22, { size: 14, color: COLORS.accent, align: 'center', bold: true });
+  wowText(ctx, UI.upgradeTitle, W / 2, 20, { size: 15, color: WOW.gold, align: 'center', bold: true, outline: 1.6 });
   ids.forEach((id, i) => {
     const t = UPGRADE_TEXT[id];
     const r = upgradeCardRect(i, ids.length);
     const sel = i === selected;
-    ctx.fillStyle = sel ? '#2f3a52' : '#22263a';
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = sel ? COLORS.accent : '#3a3f58';
-    ctx.fillRect(r.x, r.y, r.w, 2);
-    ctx.fillRect(r.x, r.y + r.h - 2, r.w, 2);
-    drawText(ctx, String(i + 1), r.x + 6, r.y + 6, { size: 8, color: COLORS.muted });
-    let y = r.y + 20;
-    ctx.font = 'bold 10px monospace';
-    for (const l of wrapText(ctx, t.name, r.w - 12)) {
-      drawText(ctx, l, r.x + r.w / 2, y, { size: 10, bold: true, align: 'center', color: COLORS.accent });
+    drawWowPanel(ctx, r.x, r.y, r.w, r.h);
+    if (sel) {
+      const p = 0.5 + Math.sin(time * 5) * 0.5;
+      ctx.save();
+      ctx.shadowColor = '#ffcc33';
+      ctx.shadowBlur = 4 + p * 4;
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = `rgba(255, 209, 0, ${0.7 + p * 0.3})`;
+      ctx.beginPath();
+      ctx.roundRect(r.x + 0.6, r.y + 0.6, r.w - 1.2, r.h - 1.2, 3);
+      ctx.stroke();
+      ctx.restore();
+    }
+    wowText(ctx, String(i + 1), r.x + 10, r.y + 8, { size: 8, color: WOW.grey });
+    const is = 24;
+    drawIcon(ctx, `up:${id}`, r.x + (r.w - is) / 2, r.y + 10, is);
+    ctx.strokeStyle = sel ? WOW.gold : '#000';
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(r.x + (r.w - is) / 2, r.y + 10, is, is);
+    let y = r.y + 40;
+    ctx.font = `10px ${WOW_FONT}`;
+    for (const l of wrapText(ctx, t.name, r.w - 14)) {
+      wowText(ctx, l, r.x + r.w / 2, y, { size: 10, bold: true, align: 'center', color: WOW.gold });
       y += 12;
     }
     y += 6;
-    ctx.font = '8px monospace';
-    for (const l of wrapText(ctx, t.effect, r.w - 12)) {
-      drawText(ctx, l, r.x + r.w / 2, y, { size: 8, align: 'center' });
+    ctx.font = `8px ${WOW_FONT}`;
+    for (const l of wrapText(ctx, t.effect, r.w - 14)) {
+      wowText(ctx, l, r.x + r.w / 2, y, { size: 8, align: 'center', color: WOW.green });
       y += 10;
     }
     y += 8;
-    ctx.font = '7px monospace';
-    for (const l of wrapText(ctx, `«${t.joke}»`, r.w - 12)) {
-      drawText(ctx, l, r.x + r.w / 2, y, { size: 7, align: 'center', color: COLORS.muted });
+    ctx.font = `7px ${WOW_FONT}`;
+    for (const l of wrapText(ctx, `«${t.joke}»`, r.w - 14)) {
+      wowText(ctx, l, r.x + r.w / 2, y, { size: 7, align: 'center', color: WOW.grey });
       y += 9;
     }
   });
-  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.upgradeHint, W / 2, H - 30, { color: COLORS.accent, align: 'center' });
+  if (ready) {
+    ctx.globalAlpha = 0.6 + Math.sin(time * 4) * 0.4;
+    wowText(ctx, UI.upgradeHint, W / 2, H - 30, { size: 8, color: WOW.gold, align: 'center' });
+    ctx.globalAlpha = 1;
+  }
 }
 
 export function drawPause(ctx) {
-  ctx.fillStyle = 'rgba(11, 11, 16, 0.6)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
   ctx.fillRect(0, 0, W, H);
-  drawText(ctx, UI.paused, W / 2, H / 2 - 16, { size: 16, color: COLORS.accent, align: 'center', bold: true });
-  drawText(ctx, UI.resume, W / 2, H / 2 + 6, { align: 'center' });
+  const items = UI.controlsHint.split(' · ');
+  const cols = 2;
+  const rows = Math.ceil(items.length / cols);
+  const pw = 230;
+  const ph = 34 + rows * 11;
+  const px = (W - pw) / 2;
+  const py = (H - ph) / 2;
+  drawWowPanel(ctx, px, py, pw, ph, UI.paused);
+  items.forEach((it, i) => {
+    const [key, ...rest] = it.split(' ');
+    const x = px + 14 + (i % cols) * (pw / 2 - 4);
+    const y = py + 14 + Math.floor(i / cols) * 11;
+    wowText(ctx, key, x, y, { size: 7, bold: true, color: WOW.gold });
+    ctx.font = `7px ${WOW_FONT}`;
+    wowText(ctx, rest.join(' '), x + ctx.measureText(key).width + 4, y, { size: 7, color: WOW.white });
+  });
+  wowText(ctx, UI.resume, W / 2, py + ph - 14, { size: 7, color: WOW.grey, align: 'center' });
 }
 
 // Пиксельный прицел вместо системного курсора (SPEC §3)
@@ -184,79 +216,24 @@ export function drawCrosshair(ctx, x, y) {
   ctx.fillRect(cx, cy + 2, 1, 3);
 }
 
-function bar(ctx, x, y, w, h, frac, color, back = '#2a2a3a') {
-  ctx.fillStyle = COLORS.shadow;
-  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-  ctx.fillStyle = back;
-  ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, Math.round(w * Math.max(0, Math.min(1, frac))), h);
-}
-
-// HUD: здоровье, жизни, шкала супера, эффекты Предметов, таймер, очки, перезарядки атак.
-// run: { timeText, lowTime, score }; effects: [{ label, left }]
-export function drawHud(ctx, n, A, time, run = null, effects = [], face = null) {
-  const hx = face ? 28 : 6;
-  if (face) {
-    const low = n.health <= n.maxHealth * 0.3 && Math.floor(time * 3) % 2 === 0;
-    drawPhoto(ctx, face.img, 5, 4, 18, 21.6);
-    if (low || n.hurtLock > 0) {
-      ctx.fillStyle = 'rgba(230, 57, 70, 0.45)';
-      ctx.fillRect(5, 4, 18, 21.6);
-    }
-  }
-  bar(ctx, hx, 6, 70, 6, n.health / n.maxHealth, '#e63946');
-  drawText(ctx, `${UI.lives} ${n.lives}`, hx + 76, 4);
-  effects.forEach((e, i) => {
-    drawText(ctx, `${e.label} ${Math.ceil(e.left)}`, 6, 30 + i * 9, { size: 7, color: e.color ?? COLORS.text });
-  });
-  if (run && run.timeText) {
-    const blinkLow = run.lowTime && Math.floor(time * 2) % 2 === 0;
-    drawText(ctx, run.timeText, W / 2 - 40, 3, { size: 12, align: 'center', bold: true, color: blinkLow ? '#e63946' : COLORS.text });
-  }
-  if (run) drawText(ctx, `${UI.score} ${run.score}`, W / 2 - 40, 17, { size: 7, align: 'center', color: COLORS.accent });
-  if (run && run.lockText) drawText(ctx, run.lockText, W / 2 - 40, 27, { size: 8, align: 'center', color: '#e63946', bold: true });
-  const full = n.superMeter >= A.super.meterMax;
-  const blink = full && Math.floor(time * 4) % 2 === 0;
-  bar(ctx, hx, 16, 70, 4, n.superMeter / A.super.meterMax, blink ? '#ffffff' : COLORS.accent);
-
-  const slots = [
-    [UI.keyShot, UI.abilityShot, n.cooldowns.shot, A.shot.cooldown],
-    [UI.keyDog, UI.abilityDog, n.cooldowns.dog, A.dog.cooldown],
-    [UI.keyStun, UI.abilityStun, n.cooldowns.stun, A.stun.cooldown],
-    [UI.keySuper, UI.abilitySuper, full ? 0 : 1, 1],
-  ];
-  const w = 46;
-  let x = W - slots.length * (w + 3) - 3;
-  for (const [key, name, cd, max] of slots) {
-    const ready = cd <= 0;
-    ctx.fillStyle = ready ? '#3d5a40' : '#3a2a2a';
-    ctx.fillRect(x, 4, w, 18);
-    if (!ready) {
-      ctx.fillStyle = '#5a3a3a';
-      ctx.fillRect(x, 4, Math.round(w * (1 - cd / max)), 18);
-    }
-    drawText(ctx, key, x + 2, 5, { size: 7, color: COLORS.muted, shadow: false });
-    drawText(ctx, name, x + 2, 13, { size: 7, color: ready ? COLORS.text : COLORS.muted, shadow: false });
-    x += w + 3;
-  }
-}
-
-// Реплика над головой (SPEC §5, §12)
 // Проигрыш (SPEC §4): «Я гнию изнутри» + фраза из пула, «Ещё раз». Фото «на полу» — этап 8.
 export function drawLose(ctx, reason, line, ready, time, photo = null) {
-  ctx.fillStyle = 'rgba(20, 8, 12, 0.85)';
+  ctx.fillStyle = 'rgba(20, 4, 6, 0.85)';
   ctx.fillRect(0, 0, W, H);
   let cx = W / 2;
+  let left = 20;
   if (photo) {
     drawPhoto(ctx, photo.img, 22, (H - photo.h * 2) / 2, photo.w, photo.h, 2);
-    cx = 22 + photo.w * 2 + (W - 22 - photo.w * 2) / 2;
+    left = 22 + photo.w * 2 + 12;
+    cx = left + (W - left - 12) / 2;
   }
-  drawText(ctx, UI.loseTitle, cx, H / 2 - 44, { size: 16, color: '#e63946', align: 'center', bold: true });
-  drawText(ctx, reason, cx, H / 2 - 20, { color: COLORS.muted, align: 'center' });
-  ctx.font = '8px monospace';
-  wrapText(ctx, `«${line}»`, photo ? W - 38 - photo.w * 2 : W - 40).forEach((l, i) => drawText(ctx, l, cx, H / 2 - 4 + i * 10, { align: 'center' }));
-  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.retry, cx, H / 2 + 30, { color: COLORS.accent, align: 'center' });
+  const pw = W - left - 12;
+  drawWowPanel(ctx, left, H / 2 - 58, pw, 106);
+  wowText(ctx, UI.loseTitle, cx, H / 2 - 44, { size: 16, color: WOW.red, align: 'center', bold: true, outline: 1.6 });
+  wowText(ctx, reason, cx, H / 2 - 20, { size: 8, color: WOW.grey, align: 'center' });
+  ctx.font = `8px ${WOW_FONT}`;
+  wrapText(ctx, `«${line}»`, pw - 24).forEach((l, i) => wowText(ctx, l, cx, H / 2 - 4 + i * 10, { size: 8, align: 'center' }));
+  if (ready) drawWowButton(ctx, { x: cx - 50, y: H / 2 + 26, w: 100, h: 15 }, UI.retry, Math.floor(time * 2) % 2 === 0, time);
 }
 
 export function drawToast(ctx, photo, text, alpha) {
@@ -273,36 +250,16 @@ export function drawToast(ctx, photo, text, alpha) {
 
 // Уровень пройден: статистика и «дальше»
 export function drawLevelDone(ctx, lines, prompt, ready, time) {
-  ctx.fillStyle = 'rgba(11, 20, 16, 0.85)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
   ctx.fillRect(0, 0, W, H);
-  drawText(ctx, UI.levelDone, W / 2, H / 2 - 50, { size: 16, color: COLORS.accent, align: 'center', bold: true });
-  lines.forEach((l, i) => drawText(ctx, l, W / 2, H / 2 - 22 + i * 11, { align: 'center' }));
-  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, prompt, W / 2, H / 2 + 40, { color: COLORS.accent, align: 'center' });
+  drawWowPanel(ctx, W / 2 - 120, H / 2 - 64, 240, 130);
+  wowText(ctx, UI.levelDone, W / 2, H / 2 - 50, { size: 16, color: WOW.gold, align: 'center', bold: true, outline: 1.6 });
+  lines.forEach((l, i) => wowText(ctx, l, W / 2, H / 2 - 22 + i * 11, { size: 8, align: 'center' }));
+  if (ready) drawWowButton(ctx, { x: W / 2 - 70, y: H / 2 + 38, w: 140, h: 15 }, prompt, Math.floor(time * 2) % 2 === 0, time);
 }
 
-export function drawBubble(ctx, text, x, y) {
-  ctx.font = 'bold 8px monospace';
-  const w = Math.ceil(ctx.measureText(text).width) + 6;
-  const bx = Math.max(2, Math.min(W - w - 2, Math.round(x - w / 2)));
-  const by = Math.round(y - 14);
-  ctx.fillStyle = COLORS.text;
-  ctx.fillRect(bx, by, w, 11);
-  ctx.fillRect(Math.round(x) - 1, by + 11, 3, 2);
-  ctx.fillStyle = COLORS.shadow;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText(text, Math.round(x), by + 2);
-}
-
-export function drawBossBar(ctx, name, health, max, phaseHealth, shielded, time) {
-  const w = 160;
-  const x = Math.round(W / 2 - w / 2);
-  const y = 30;
-  drawText(ctx, name, W / 2, y - 10, { size: 7, align: 'center', color: COLORS.accent, bold: true });
-  const color = shielded && Math.floor(time * 8) % 2 === 0 ? '#ffffff' : '#5a76b8';
-  bar(ctx, x, y, w, 5, health / max, color);
-  ctx.fillStyle = COLORS.shadow;
-  for (let hp = phaseHealth; hp < max; hp += phaseHealth) ctx.fillRect(x + Math.round((w * hp) / max), y, 1, 5);
+export function drawBubble(ctx, text, x, y, viewW = W) {
+  drawChatBubble(ctx, text, x, y, viewW);
 }
 
 export function drawCutsceneBackdrop(ctx, time) {
@@ -319,22 +276,18 @@ export function drawCutsceneBackdrop(ctx, time) {
 
 export function drawCutsceneDialog(ctx, { label, name, text, page, pages, ready, time, speaker, photo }) {
   if (speaker) drawPhoto(ctx, speaker.img, 6, 40, speaker.w, speaker.h, 2);
-  drawText(ctx, label, 170, 30, { size: 8, color: COLORS.muted });
-  drawText(ctx, name, 170, 41, { size: 12, color: COLORS.accent, bold: true });
+  wowText(ctx, label, 170, 30, { size: 8, color: WOW.grey });
+  wowText(ctx, name, 170, 41, { size: 13, color: WOW.gold, bold: true, outline: 1.4 });
   const box = { x: 164, y: 70, w: W - 176, h: 110 };
   if (photo) {
     box.w -= photo.w + 12;
     drawPhoto(ctx, photo.img, W - 12 - photo.w, box.y - 6, photo.w, photo.h);
   }
-  ctx.fillStyle = 'rgba(34, 38, 58, 0.92)';
-  ctx.fillRect(box.x, box.y, box.w, box.h);
-  ctx.fillStyle = '#5a76b8';
-  ctx.fillRect(box.x, box.y, 2, box.h);
-  drawText(ctx, UI.bossName, box.x + 10, box.y + 8, { size: 8, color: '#9db4ff', bold: true });
-  ctx.font = '9px monospace';
-  wrapText(ctx, text, box.w - 20).forEach((l, i) => drawText(ctx, l, box.x + 10, box.y + 24 + i * 13, { size: 9 }));
-  drawText(ctx, `${page}/${pages}`, box.x + box.w - 8, box.y + box.h - 12, { size: 7, color: COLORS.muted, align: 'right' });
-  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.cutsceneHint, W / 2, H - 18, { size: 7, color: COLORS.accent, align: 'center' });
+  drawWowPanel(ctx, box.x, box.y, box.w, box.h, UI.bossName);
+  ctx.font = `9px ${WOW_FONT}`;
+  wrapText(ctx, text, box.w - 20).forEach((l, i) => wowText(ctx, l, box.x + 10, box.y + 16 + i * 13, { size: 9 }));
+  wowText(ctx, `${page}/${pages}`, box.x + box.w - 8, box.y + box.h - 13, { size: 7, color: WOW.grey, align: 'right' });
+  if (ready && Math.floor(time * 2) % 2 === 0) wowText(ctx, UI.cutsceneHint, W / 2, H - 18, { size: 7, color: WOW.gold, align: 'center' });
 }
 
 function drawMug(ctx, x, y, time) {
@@ -362,23 +315,8 @@ export function drawFinal(ctx, photo, lines, prompt, ready, time) {
   drawPhoto(ctx, photo.img, 24, (H - photo.h * 2) / 2, photo.w, photo.h, 2);
   const cx = 24 + photo.w * 2 + (W - 24 - photo.w * 2) / 2;
   drawMug(ctx, cx - 15, 22, time);
-  drawText(ctx, UI.finalTitle, cx, 60, { size: 20, color: COLORS.accent, align: 'center', bold: true });
-  drawText(ctx, UI.finalPlace, cx, 86, { size: 8, color: COLORS.muted, align: 'center' });
-  lines.forEach((l, i) => drawText(ctx, l, cx, 108 + i * 12, { align: 'center' }));
-  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, prompt, cx, H - 30, { color: COLORS.accent, align: 'center' });
-}
-
-export function drawCredits(ctx, lines, offset, gap, done, time) {
-  ctx.fillStyle = COLORS.shadow;
-  ctx.fillRect(0, 0, W, H);
-  lines.forEach((l, i) => {
-    const y = H + i * gap - offset;
-    if (y < -12 || y > H) return;
-    const head = l.head;
-    drawText(ctx, head ? l.text : `«${l.text}»`, W / 2, y, { size: head ? 12 : 8, align: 'center', bold: head, color: head ? COLORS.accent : COLORS.text });
-  });
-  const hint = done ? UI.creditsAgain : UI.creditsSkip;
-  ctx.fillStyle = COLORS.shadow;
-  ctx.fillRect(0, H - 20, W, 20);
-  if (!done || Math.floor(time * 2) % 2 === 0) drawText(ctx, hint, W / 2, H - 14, { size: 7, align: 'center', color: done ? COLORS.accent : COLORS.muted });
+  wowText(ctx, UI.finalTitle, cx, 60, { size: 20, color: WOW.gold, align: 'center', bold: true, outline: 2 });
+  wowText(ctx, UI.finalPlace, cx, 86, { size: 8, color: WOW.grey, align: 'center' });
+  lines.forEach((l, i) => wowText(ctx, l, cx, 108 + i * 12, { size: 8, align: 'center' }));
+  if (ready) drawWowButton(ctx, { x: cx - 50, y: H - 34, w: 100, h: 15 }, prompt, Math.floor(time * 2) % 2 === 0, time);
 }

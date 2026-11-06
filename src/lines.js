@@ -16,6 +16,7 @@ export const UI = Object.freeze({
   resume: 'Esc — продолжить',
   controlsHint: 'A/D бег · W прыжок · S вниз · ЛКМ Щелбан · ПКМ Собака · E 5:0 · R Папа · F экран · M звук · Esc пауза',
   lives: 'Жизни',
+  livesInfinite: '∞',
   abilityShot: 'Щелбан',
   abilityDog: 'Собака',
   abilityStun: '5:0',
@@ -24,7 +25,6 @@ export const UI = Object.freeze({
   keyDog: 'ПКМ',
   keyStun: 'E',
   keySuper: 'R',
-  score: 'Очки',
   loseTitle: 'Я гнию изнутри',
   loseLives: 'Жизни кончились',
   loseTime: 'Время вышло',
@@ -38,6 +38,7 @@ export const UI = Object.freeze({
   effectVodka: 'Стопарик',
   effectBeer: 'Пиво 0,0',
   effectScooter: 'Самокат',
+  effectSmoke: 'Затяжка',
   levelLabel: 'Уровень',
   next: 'Клик или Пробел — дальше',
   toTitle: 'Клик или Пробел — на титульный',
@@ -48,10 +49,12 @@ export const UI = Object.freeze({
   lockStart: 'Зожники окружили!',
   lockClear: 'Свободно!',
   lockWave: 'Волна',
+  loveSign: 'Warszawa',
+  stopSign: 'Przystanek',
+  kioskSign: 'Kiosk',
+  zabka: 'żabka',
   finalTitle: 'Пиво!',
   finalPlace: 'U Sióstr, Złota 63A',
-  creditsTitle: 'Никич: Путь к Пиву',
-  creditsThanks: 'Спасибо, что дошли до Пива',
   creditsAgain: 'Клик или Пробел — ещё раз',
   creditsSkip: 'Клик — пропустить',
   // Названия Уровней (SPEC §9), по порядку
@@ -82,23 +85,22 @@ export const UPGRADE_TEXT = Object.freeze({
   'angry-dog': { name: 'Злая собака', effect: 'Собака держит на 1 с дольше', joke: 'Не кусается. Почти' },
   'magnet': { name: 'Магнит для халявы', effect: 'Бонусы притягиваются с 80 px', joke: 'Халява сама найдёт героя' },
   'renter': { name: 'Прокатчик', effect: '+1 Самокат на каждом Уровне', joke: 'Абонемент на все самокаты Варшавы' },
-  'iron-liver': { name: 'Железная печень', effect: 'Пиво 0,0 отнимает вдвое меньше', joke: 'Печень видала и не такое' },
+  'iron-liver': { name: 'Железная печень', effect: 'Пиво 0,0 развозит вдвое короче', joke: 'Печень видала и не такое' },
   'five-zero': { name: '5:0 в нашу пользу', effect: 'Радиус 5:0 +20%', joke: 'Счёт видно с последнего ряда' },
   'bouncy': { name: 'Прыгучий', effect: 'Двойной прыжок', joke: 'Пружинки в кроссовках с Allegro' },
 });
 
 export const LINES = Object.freeze({
-  pit: ['ПАМАГИТЕ', 'Это пиздец.'],
+  pit: ['ПАМАГИТЕ'],
   stun: ['5:0!'],
-  super: ['Папа сейчас всё сделает', 'Да мы его закопаем нахуй, ёбаный рот'],
+  super: ['Папа сейчас всё сделает'],
   kill: ['Легендарная игра', 'Дал бы под хвост'],
   hit: ['ПАМАГИТЕ', 'Нахуй блять сука'],
-  levelStart: ['Поебать кого ебать', 'Мы только по пиву', 'Что ты, готов нахуй на улицу ехать, бля?', 'На улицу.'],
-  lowHealth: ['Я гнию изнутри', 'Это пиздец.'],
+  levelStart: ['Поебать кого ебать', 'Мы только по пиву'],
+  lowHealth: ['Я гнию изнутри'],
   chip: ['Легендарная игра'],
   beerZero: ['Мы только по пиву… это не пиво, сука'],
-  lose: ['Я гнию изнутри', 'Миша, я тебя ненавижу', 'Да я щас ваще трусы сниму, нахуй', 'Миша, блять, какая нахуй честь команды?'],
-  vodka: ['Я с утра въебал два литра, нахуй', 'Это было в 11 утра, блядь. Реально.'],
+  lose: ['Я гнию изнутри', 'Миша, я тебя ненавижу', 'Да я щас ваще трусы сниму, нахуй'],
   // Черновики — заказчик заменит на этапе 10
   moto: ['Мотоциклист — это донор, просто ещё не знает', 'Опять на табуретке с мотором'],
   // Над Йога-тёткой во время лекции (черновики)
@@ -106,7 +108,7 @@ export const LINES = Object.freeze({
   gmanPhase1: ['Креатинчик… Начнём по-деловому', 'Глоточек — и к делу'],
   gmanPhase2: ['Ещё креатинчика. Мне нужны помощники', 'Зожники, к ноге!'],
   gmanPhase3: ['Последний креатинчик. Теперь я — это вы', 'Посмотрим, кто кого щёлкнет'],
-  gmanSummon: ['Свежая партия ЗОЖа', 'Смузи за мой счёт', 'Бегите, мои хорошие', 'Кардио, мистер Никич', 'Я вчера видел, как чувака лущили нахуй'],
+  gmanSummon: ['Свежая партия ЗОЖа', 'Смузи за мой счёт', 'Бегите, мои хорошие', 'Кардио, мистер Никич'],
   gmanStun: ['5:0!', 'Моя очередь: 5:0'],
   gmanDefeat: ['Время… подходящее. Идите пить', 'Ладно. Пиво ваше'],
   victory: ['Мы только по пиву!', 'Легендарная игра'],
@@ -116,19 +118,8 @@ export const LINES = Object.freeze({
 });
 
 export const NIKICH_LINE_KEYS = Object.freeze([
-  'levelStart', 'hit', 'pit', 'lowHealth', 'kill', 'stun', 'super', 'chip', 'beerZero', 'vodka', 'moto', 'lose', 'victory', 'easter',
+  'levelStart', 'hit', 'pit', 'lowHealth', 'kill', 'stun', 'super', 'chip', 'beerZero', 'moto', 'lose', 'victory', 'easter',
 ]);
-
-export const VOICE_LINES = Object.freeze({
-  'Что ты, готов нахуй на улицу ехать, бля?': 'ready',
-  'На улицу.': 'street',
-  'Это пиздец.': 'pizdec',
-  'Да мы его закопаем нахуй, ёбаный рот': 'bury',
-  'Миша, блять, какая нахуй честь команды?': 'misha',
-  'Я с утра въебал два литра, нахуй': 'two-liters',
-  'Это было в 11 утра, блядь. Реально.': 'eleven-am',
-  'Я вчера видел, как чувака лущили нахуй': 'saw-dude',
-});
 
 export const GMAN_SCENES = Object.freeze([
   Object.freeze([
@@ -167,4 +158,105 @@ export const GMAN_VERDICT = Object.freeze({
     '«ПАМАГИТЕ», говорите? Я всё слышал.',
     'Сгнили изнутри, но дошли. Уважаю.',
   ]),
+});
+
+export const POSTERS = Object.freeze([
+  Object.freeze({ title: 'KOKTAJLE', sub: 'zielony detoks 24/7', bg: '#80b918', fg: '#f4f1de' }),
+  Object.freeze({ title: 'JOGA', sub: 'na bulwarach', bg: '#c77dff', fg: '#1b1b1b' }),
+  Object.freeze({ title: 'PIWO 0,0', sub: 'teraz nowe!', bg: '#2a9d8f', fg: '#ffd166' }),
+  Object.freeze({ title: 'MARATON', sub: 'Warszawa 42 km', bg: '#e63946', fg: '#f4f1de' }),
+  Object.freeze({ title: 'ZDROWO ŻYJ', sub: 'zero cukru', bg: '#ffd166', fg: '#1d3557' }),
+  Object.freeze({ title: 'SIŁOWNIA', sub: 'miesiąc gratis', bg: '#1d3557', fg: '#ffd166' }),
+  Object.freeze({ title: 'JARMUŻ', sub: 'promocja -50%', bg: '#2d6a4f', fg: '#f4f1de' }),
+  Object.freeze({ title: 'BIEG NOCNY', sub: 'Wola 10 km', bg: '#3a0ca3', fg: '#f4f1de' }),
+  Object.freeze({ title: 'MIESZKANIA', sub: 'Wola, od zaraz', bg: '#f4f1de', fg: '#c8102e' }),
+  Object.freeze({ title: 'ROWEREM', sub: 'do pracy!', bg: '#4cc9f0', fg: '#1b1b1b' }),
+  Object.freeze({ title: 'KONCERT', sub: 'sobota, Torwar', bg: '#ff4fa3', fg: '#1b1b1b' }),
+  Object.freeze({ title: 'WYPRZEDAŻ', sub: 'tylko dziś', bg: '#c8102e', fg: '#ffd166' }),
+]);
+
+export const SHOP_SIGNS = Object.freeze([
+  Object.freeze({ text: 'APTEKA', bg: '#2d6a4f', fg: '#f4f1de', cross: true }),
+  Object.freeze({ text: 'PIEKARNIA', bg: '#8b5a2b', fg: '#ffe8a3' }),
+  Object.freeze({ text: 'KWIACIARNIA', bg: '#ff8fab', fg: '#1b1b1b' }),
+  Object.freeze({ text: 'WARZYWA', bg: '#80b918', fg: '#1b1b1b' }),
+  Object.freeze({ text: 'KANTOR', bg: '#ffd400', fg: '#1b1b1b' }),
+  Object.freeze({ text: 'FRYZJER', bg: '#1d3557', fg: '#f4f1de' }),
+  Object.freeze({ text: 'LOMBARD', bg: '#6a040f', fg: '#ffd166' }),
+  Object.freeze({ text: 'SKLEP NOCNY', bg: '#3a0ca3', fg: '#ffd166' }),
+  Object.freeze({ text: 'KEBAB', bg: '#e63946', fg: '#ffd166' }),
+  Object.freeze({ text: 'PIZZERIA', bg: '#2a9d8f', fg: '#f4f1de' }),
+  Object.freeze({ text: 'ALKOHOLE 24h', bg: '#14101f', fg: '#ff4fa3' }),
+  Object.freeze({ text: 'PIWIARNIA', bg: '#5a3418', fg: '#ffd166' }),
+  Object.freeze({ text: 'BAR MLECZNY', bg: '#f4f1de', fg: '#1d3557' }),
+  Object.freeze({ text: 'SKLEP', bg: '#c8102e', fg: '#f4f1de' }),
+]);
+
+export const NEON_SIGNS = Object.freeze(['PIWO', 'BAR', 'OTWARTE']);
+
+export const CRAWL = Object.freeze({
+  intro: 'Не так давно, в не такой уж далёкой Варшаве…',
+  logo: Object.freeze(['НИКИЧ', 'ПУТЬ К ПИВУ']),
+  episode: 'Эпизод V',
+  title: 'ЗОЖНИКИ НАНОСЯТ ОТВЕТНЫЙ КАРДИО-УДАР',
+  story: Object.freeze([
+    'Варшава в опасности. Зожники захватили улицы от Stańczyka до Złotej и навязывают горожанам кардио, детокс и смузи из сельдерея.',
+    'Лишь один человек не сдался. Вооружённый окурками, верной Собакой и древним жестом 5:0, Никич прошёл через стройку на Rondzie, рынок Hali Mirowskiej и тень Дворца культуры.',
+    'В бою у бара U Sióstr он победил самого опасного противника — самого себя в костюме. Пиво налито.',
+    'Но Зожники не сдаются. Где-то на бульварах уже раскатывают коврики для йоги…',
+  ]),
+  castTitle: 'В РОЛЯХ',
+  cast: Object.freeze([
+    Object.freeze(['Никич', 'Никич']),
+    Object.freeze(['G-man', 'тоже Никич, в костюме']),
+    Object.freeze(['Собака', 'Собака']),
+    Object.freeze(['Бегуны', 'марафонцы с Вислы']),
+    Object.freeze(['Велосипедисты', 'Veturilo и лайкра']),
+    Object.freeze(['Мотоциклисты', 'будущие доноры']),
+    Object.freeze(['Йога-тётки', 'хранительницы чакр']),
+    Object.freeze(['Смузи-хипстеры', 'сельдерей в стакане']),
+    Object.freeze(['Пиво 0,0', 'в роли ловушки']),
+    Object.freeze(['Варшава', 'в роли себя']),
+  ]),
+  phrasesTitle: 'ЛЕГЕНДАРНЫЕ ФРАЗЫ',
+  thanks: 'Спасибо, что дошли до Пива',
+});
+
+export const HUD = Object.freeze({
+  playerName: 'Никич',
+  manaLabel: 'Папа',
+  stunned: 'Оглушён',
+  infinite: '∞',
+  gmanTitle: '<Наблюдатель>',
+  mobClass: 'Зожник',
+  miss: 'Промах',
+  left: 'Осталось',
+  cooldown: 'Восстановление',
+  passive: 'Улучшение, действует всегда',
+  skills: {
+    shot: { name: 'Щелбан', desc: 'Щелчком запускает окурок в сторону прицела. Урон 10, дальность 220.' },
+    dog: { name: 'Собака', desc: 'Собака бежит к прицелу и вцепляется в ногу первого Зожника: 15 урона в секунду, держит 3 с.' },
+    stun: { name: '5:0', desc: '«Пять-ноль!» — Зожники в радиусе 70 оглушены на 1,5 с и получают 5 урона.' },
+    super: { name: 'Папа сейчас всё сделает', desc: '200 урона всем Зожникам на экране. Шкала Папы копится от нанесённого урона, нужно 100.' },
+  },
+  auras: {
+    vodka: { name: 'Стопарик', desc: '+25% к урону всех атак. Экран слегка плывёт.' },
+    beerPower: { name: 'Пивная сила', desc: '+{damage}% к урону Щелбана, получаемый урон −{armor}%.' },
+    smoke: { name: 'Затяжка', desc: 'Бег ×1,3, прыжок выше на 30%, Щелбан в 1,6 раза чаще.' },
+    scooter: { name: 'Самокат', desc: 'Скорость ×2, прыжок выше, сбивает Зожников. Врезался в стену — лицом в асфальт.' },
+    luck: { name: 'Легендарная игра', desc: 'Удача: Зожники промахиваются по Никичу в {chance}% случаев.' },
+    drunk: { name: 'Опьянение', desc: 'Бег −{speed}%, прыжок ниже, прицел запаздывает, в глазах плывёт. Новое Пиво 0,0 — ещё сильнее.' },
+    stunned: { name: 'Оглушение', desc: 'Ни шагу, ни атаки.' },
+  },
+  bossClass: 'Босс',
+  bossLevel: '??-го уровня',
+  levelSuffix: '-го уровня',
+  kinds: Object.freeze({
+    runner: 'Бегун',
+    cyclist: 'Велосипедист',
+    moto: 'Мотоциклист',
+    yoga: 'Йога-тётка',
+    smoothie: 'Смузи-хипстер',
+    dummy: 'Манекен',
+  }),
 });
