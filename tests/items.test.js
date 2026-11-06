@@ -87,6 +87,12 @@ test('Сигарета: +15 с к таймеру', () => {
   assert.equal(r.timer.left, 25);
 });
 
+test('Сигарета на Уровне без таймера ничего не ломает', () => {
+  const r = { ...newRun(), timer: null };
+  const res = applyItem(createNikich(0, 0), 'cigarette', r);
+  assert.equal(res.floater, null);
+});
+
 test('Покерная фишка: +100 очков и «Легендарная игра»', () => {
   const r = newRun();
   const res = applyItem(createNikich(0, 0), 'chip', r);

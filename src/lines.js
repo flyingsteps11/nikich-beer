@@ -5,7 +5,6 @@ export const UI = Object.freeze({
   start: 'Клик или Пробел — начать',
   paused: 'Пауза',
   resume: 'Esc — продолжить',
-  testMap: 'Тестовая карта · Зожники',
   controlsHint: 'A/D бег · W прыжок · S вниз · ЛКМ Щелбан · ПКМ Собака · E 5:0 · R Папа · Esc пауза',
   lives: 'Жизни',
   abilityShot: 'Щелбан',
@@ -30,6 +29,26 @@ export const UI = Object.freeze({
   effectVodka: 'Стопарик',
   effectBeer: 'Пиво 0,0',
   effectScooter: 'Самокат',
+  levelLabel: 'Уровень',
+  next: 'Клик или Пробел — дальше',
+  toTitle: 'Клик или Пробел — на титульный',
+  bossLater: 'Бой с G-man появится позже — пока дверь открыта',
+  // Названия Уровней (SPEC §9), по порядку
+  levelNames: Object.freeze([
+    'Дом Никича, Stańczyka',
+    'Rondo Daszyńskiego',
+    'Hala Mirowska',
+    'PKiN / Złote Tarasy',
+    'Złota 63A, U Sióstr',
+  ]),
+  // Подсказки управления на Уровне 1
+  hintRun: 'A / D — бежать',
+  hintJump: 'W или Пробел — прыжок, зажми — выше',
+  hintShot: 'Мышь — прицел, ЛКМ — Щелбан',
+  hintDrop: 'S — спрыгнуть с балкона',
+  hintDog: 'ПКМ — Собака',
+  hintStun: 'E — 5:0, оглушить всех рядом',
+  hintSuper: 'Шкала полная? R — Папа сейчас всё сделает',
 });
 
 export const LINES = Object.freeze({

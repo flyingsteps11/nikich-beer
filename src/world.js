@@ -17,6 +17,8 @@ export function createMap(width, height, tileSize) {
     items: [], // предметы на месте: { type, tx, ty } (см. items.js)
     checkpoints: [], // Контрольные точки: { tx, ty } — ряд, в котором стоят ноги
     exit: null, // зона выхода: { tx } — дошёл до этого столбца, Уровень пройден
+    movers: [], // Трамваи: { tx0, tx1, ty, w, h, speed, pause } (см. createMovers)
+    hints: [], // Подсказки управления: { tx, ty, text }
     // За левым и правым краем — стена, над картой и под ней — пусто (там Яма).
     get(tx, ty) {
       if (tx < 0 || tx >= width) return TILE.SOLID;
@@ -115,6 +117,66 @@ export function reachedExit(map, body) {
   return !!map.exit && body.x + body.w / 2 >= map.exit.tx * map.tileSize;
 }
 
+// ---------- Трамвай: движущаяся платформа (SPEC §9, Уровень 3) ----------
+
+// def: крыша ездит левым краем от tx0 до tx1 и обратно, ty — ряд крыши; w, h — в тайлах;
+// speed — px/с, pause — с стоянки на конечных.
+export function createMovers(defs, ts) {
+  return defs.map((d) => ({
+    x: d.tx0 * ts,
+    y: d.ty * ts,
+    w: d.w * ts,
+    h: d.h * ts,
+    x0: d.tx0 * ts,
+    x1: d.tx1 * ts,
+    speed: d.speed,
+    pause: d.pause,
+    dir: 1,
+    wait: d.pause,
+    dx: 0, // сдвиг за последний шаг — на столько везём стоящего на крыше
+  }));
+}
+
+export function updateMovers(movers, dt) {
+  for (const m of movers) {
+    m.dx = 0;
+    if (m.wait > 0) {
+      m.wait = Math.max(0, m.wait - dt);
+      continue;
+    }
+    const target = m.dir > 0 ? m.x1 : m.x0;
+    const step = Math.min(Math.abs(target - m.x), m.speed * dt);
+    m.dx = Math.sign(target - m.x) * step;
+    m.x += m.dx;
+    if (Math.abs(target - m.x) < 1e-6) {
+      m.x = target;
+      m.dir = -m.dir;
+      m.wait = m.pause;
+    }
+  }
+}
+
+function overlapsX(body, m) {
+  return body.x < m.x + m.w && body.x + body.w > m.x;
+}
+
+// После шага физики: падал сверху на крышу — ставим на неё как на тонкую платформу.
+// prevBottom — низ тела до шага. Возвращает Трамвай, на котором стоит тело, или null.
+export function landOnMovers(body, movers, prevBottom) {
+  if (body.vy < 0 || body.dropTimer > 0) return null;
+  const bottom = body.y + body.h;
+  for (const m of movers) {
+    if (overlapsX(body, m) && prevBottom <= m.y + 1e-6 && bottom >= m.y) {
+      body.y = m.y - body.h;
+      body.vy = 0;
+      body.onGround = true;
+      body.groundTile = TILE.THIN; // S — спрыгнуть, как с тонкой платформы
+      return m;
+    }
+  }
+  return null;
+}
+
 // ---------- Камера ----------
 
 export function createCamera(viewW, viewH) {
@@ -206,4 +268,204 @@ export function drawTiles(ctx, map, cam) {
       }
     }
   }
+}
+
+// ---------- Параллакс: силуэты Варшавы (SPEC §9, §13) ----------
+// theme: { sky: [верх, низ], layers: [{ factor, color, windows?, base, fill, landmarks: [{ type, at, scale }] }] }
+// factor — доля скорости камеры; base — px от низа экрана до подножия слоя;
+// fill — чем засыпать промежутки: 'blocks' | 'towers' | 'trees' | 'lamps' | 'kamienice' | 'none'.
+// makeCanvas(w, h) даёт офскрин-канвас — так модуль не трогает DOM сам.
+
+// Детерминированный генератор: один и тот же Уровень — один и тот же фон
+export function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Ширина слоя: экран плюс путь, который слой проедет за весь Уровень
+export function layerWidth(mapPixelWidth, viewW, factor) {
+  return Math.ceil(viewW + Math.max(0, mapPixelWidth - viewW) * factor) + 2;
+}
+
+function box(g, x, y, w, h) {
+  g.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
+}
+
+function litWindows(g, x, y, w, h, color, rnd, { step = 4, size = 1, chance = 0.35 } = {}) {
+  if (!color) return;
+  g.fillStyle = color;
+  for (let wy = y + 3; wy < y + h - 2; wy += step) {
+    for (let wx = x + 2; wx < x + w - 2; wx += step - 1) {
+      if (rnd() < chance) box(g, wx, wy, size, size);
+    }
+  }
+}
+
+// Ориентиры: подножие в (cx, base), s — масштаб
+const LANDMARKS = {
+  // Дворец культуры и науки: ярусы, башенки по углам, шпиль
+  pkin(g, cx, base, s, L, rnd) {
+    const tiers = [[200, 26], [120, 44], [78, 40], [52, 46], [34, 30], [22, 22], [12, 18]];
+    let y = base;
+    for (const [w, h] of tiers) {
+      y -= h * s;
+      box(g, cx - (w * s) / 2, y, w * s, h * s);
+      if (w >= 78) { // башенки по углам яруса
+        box(g, cx - (w * s) / 2, y - 8 * s, 6 * s, 8 * s);
+        box(g, cx + (w * s) / 2 - 6 * s, y - 8 * s, 6 * s, 8 * s);
+      }
+    }
+    box(g, cx - 1.5 * s, y - 46 * s, 3 * s, 46 * s);
+    litWindows(g, cx - 40 * s, base - 150 * s, 80 * s, 120 * s, L.windows, rnd, { chance: 0.25 });
+    g.fillStyle = L.color;
+  },
+  // Varso: тонкая башня с сужением и иглой
+  varso(g, cx, base, s, L, rnd) {
+    box(g, cx - 14 * s, base - 190 * s, 28 * s, 190 * s);
+    box(g, cx - 10 * s, base - 215 * s, 20 * s, 25 * s);
+    box(g, cx - 5 * s, base - 232 * s, 10 * s, 17 * s);
+    box(g, cx - 1 * s, base - 290 * s, 2 * s, 58 * s);
+    litWindows(g, cx - 12 * s, base - 185 * s, 24 * s, 180 * s, L.windows, rnd, { chance: 0.2 });
+    g.fillStyle = L.color;
+  },
+  // Warsaw Spire: стекло с косой крышей и двумя низкими корпусами
+  spire(g, cx, base, s, L, rnd) {
+    box(g, cx - 40 * s, base - 60 * s, 18 * s, 60 * s);
+    box(g, cx + 22 * s, base - 60 * s, 18 * s, 60 * s);
+    box(g, cx - 18 * s, base - 160 * s, 36 * s, 160 * s);
+    g.beginPath();
+    g.moveTo(Math.round(cx - 18 * s), Math.round(base - 160 * s));
+    g.lineTo(Math.round(cx + 18 * s), Math.round(base - 160 * s));
+    g.lineTo(Math.round(cx + 18 * s), Math.round(base - 200 * s));
+    g.closePath();
+    g.fill();
+    litWindows(g, cx - 16 * s, base - 155 * s, 32 * s, 150 * s, L.windows, rnd, { chance: 0.2 });
+    g.fillStyle = L.color;
+  },
+  // Złote Tarasy: волнистая стеклянная крыша
+  tarasy(g, cx, base, s) {
+    const w = 220 * s;
+    box(g, cx - w / 2, base - 30 * s, w, 30 * s);
+    for (let i = 0; i < 5; i++) {
+      g.beginPath();
+      g.ellipse(Math.round(cx - w / 2 + (i + 0.5) * (w / 5)), Math.round(base - 30 * s), w / 10, (14 + (i % 2) * 8) * s, 0, Math.PI, 0);
+      g.fill();
+    }
+  },
+  // Hala Mirowska: длинный кирпичный зал с двускатной крышей и арками
+  hala(g, cx, base, s, L) {
+    const w = 190 * s;
+    box(g, cx - w / 2, base - 42 * s, w, 42 * s);
+    g.beginPath();
+    g.moveTo(Math.round(cx - w / 2), Math.round(base - 42 * s));
+    g.lineTo(Math.round(cx), Math.round(base - 62 * s));
+    g.lineTo(Math.round(cx + w / 2), Math.round(base - 42 * s));
+    g.closePath();
+    g.fill();
+    if (L.windows) {
+      g.fillStyle = L.windows;
+      for (let i = 0; i < 9; i++) box(g, cx - w / 2 + 8 * s + i * 20 * s, base - 32 * s, 10 * s, 18 * s);
+      g.fillStyle = L.color;
+    }
+  },
+  // Стройка: башенный кран
+  crane(g, cx, base, s) {
+    box(g, cx - 2 * s, base - 150 * s, 4 * s, 150 * s);
+    box(g, cx - 30 * s, base - 150 * s, 110 * s, 3 * s);
+    box(g, cx - 30 * s, base - 147 * s, 12 * s, 8 * s); // противовес
+    box(g, cx + 60 * s, base - 147 * s, 1, 50 * s); // трос
+    box(g, cx - 2 * s, base - 162 * s, 4 * s, 12 * s);
+  },
+};
+
+const FILLERS = {
+  // Панельные блоки
+  blocks(g, x, base, rnd, L) {
+    const w = 30 + rnd() * 40;
+    const h = 40 + rnd() * 50;
+    box(g, x, base - h, w, h);
+    litWindows(g, x, base - h, w, h, L.windows, rnd);
+    g.fillStyle = L.color;
+    return w + 2 + rnd() * 10;
+  },
+  // Офисные башни
+  towers(g, x, base, rnd, L) {
+    const w = 20 + rnd() * 26;
+    const h = 70 + rnd() * 90;
+    box(g, x, base - h, w, h);
+    litWindows(g, x, base - h, w, h, L.windows, rnd, { chance: 0.25 });
+    g.fillStyle = L.color;
+    return w + 4 + rnd() * 16;
+  },
+  // Старые каменицы с крышами
+  kamienice(g, x, base, rnd, L) {
+    const w = 26 + rnd() * 22;
+    const h = 34 + rnd() * 24;
+    box(g, x, base - h, w, h);
+    box(g, x + 2, base - h - 6, w - 4, 6);
+    litWindows(g, x, base - h, w, h, L.windows, rnd, { step: 7, size: 2, chance: 0.45 });
+    g.fillStyle = L.color;
+    return w;
+  },
+  // Деревья во дворах
+  trees(g, x, base, rnd) {
+    const r = 8 + rnd() * 10;
+    box(g, x + r - 1, base - r, 3, r);
+    g.beginPath();
+    g.arc(Math.round(x + r), Math.round(base - r - r * 0.6), r, 0, Math.PI * 2);
+    g.fill();
+    return r * 2 + 6 + rnd() * 30;
+  },
+  // Фонари и заборчики
+  lamps(g, x, base, rnd, L) {
+    box(g, x, base - 40, 2, 40);
+    box(g, x - 3, base - 42, 8, 3);
+    if (L.windows) {
+      g.fillStyle = L.windows;
+      box(g, x - 2, base - 39, 6, 2);
+      g.fillStyle = L.color;
+    }
+    box(g, x + 6, base - 8, 30 + rnd() * 20, 2);
+    return 50 + rnd() * 40;
+  },
+  none() { return 1e9; },
+};
+
+export function buildParallax(theme, mapPixelWidth, viewW, viewH, makeCanvas, seed = 1) {
+  const layers = theme.layers.map((L, i) => {
+    const w = layerWidth(mapPixelWidth, viewW, L.factor);
+    const canvas = makeCanvas(w, viewH);
+    const g = canvas.getContext('2d');
+    const rnd = seededRandom(seed * 97 + i * 13);
+    const base = viewH - L.base;
+    g.fillStyle = L.color;
+    const fill = FILLERS[L.fill ?? 'none'];
+    for (let x = -10; x < w;) x += fill(g, x, base, rnd, L);
+    for (const lm of L.landmarks ?? []) {
+      g.fillStyle = L.color;
+      LANDMARKS[lm.type](g, lm.at * w, base, lm.scale ?? 1, L, rnd);
+    }
+    // Земля под слоем, чтобы не просвечивало небо
+    g.fillStyle = L.color;
+    g.fillRect(0, base, w, viewH - base);
+    return { canvas, factor: L.factor };
+  });
+  return { sky: theme.sky, layers, gradient: null };
+}
+
+export function drawParallax(ctx, px, camX, viewW, viewH) {
+  if (!px.gradient) {
+    px.gradient = ctx.createLinearGradient(0, 0, 0, viewH);
+    px.gradient.addColorStop(0, px.sky[0]);
+    px.gradient.addColorStop(1, px.sky[1]);
+  }
+  ctx.fillStyle = px.gradient;
+  ctx.fillRect(0, 0, viewW, viewH);
+  for (const l of px.layers) ctx.drawImage(l.canvas, -Math.round(camX * l.factor), 0);
 }

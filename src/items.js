@@ -75,6 +75,7 @@ export function applyItem(n, type, run, I = ITEMS) {
       res.floater = `+${Math.round((I.vodka.damageMul - 1) * 100)}%`;
       break;
     case 'cigarette':
+      if (!run.timer) break; // Уровень без таймера — перекур просто так
       run.timer.left += I.cigarette.time;
       res.floater = `+${I.cigarette.time} с`;
       break;

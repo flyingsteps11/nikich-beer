@@ -1,12 +1,13 @@
 // Игровой цикл с фиксированным шагом 1/60 и машина экранов (SPEC §15).
-// Этап 4: титульный экран → тестовая карта (Зожники, Предметы, Ямы, таймер) → пауза / Проигрыш / Уровень пройден.
+// Этап 5: титульный экран → Уровни 1–5 по порядку (Проигрыш — тот же Уровень заново) → титульный.
 
 import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH, ITEMS, LEVEL } from './config.js';
 import { Input, bindInput, readMoveIntent } from './input.js';
-import { fellOut } from './physics.js';
+import { fellOut, moveX } from './physics.js';
 import {
   createCamera, updateCamera, snapCamera, drawTiles, createTimer, updateTimer, formatTime,
-  createCheckpoints, updateCheckpoints, reachedExit,
+  createCheckpoints, updateCheckpoints, reachedExit, createMovers, updateMovers, landOnMovers,
+  buildParallax, drawParallax,
 } from './world.js';
 import {
   createNikich, setAim, updateNikich, tryShoot, updateShots, tryDog, updateDogs,
@@ -20,10 +21,11 @@ import {
 } from './zozniki.js';
 import {
   drawNikich, drawZoznik, drawDog, drawShot, drawSmoothieShot, drawDoor, drawRamp, drawItem, drawCheckpoint,
+  drawTram,
 } from './art.js';
-import { buildTestMap } from './levels/test.js';
+import { LEVELS } from './levels/index.js';
 import {
-  drawSky, drawTitle, drawPause, drawCrosshair, drawText, drawBubble, drawHud, drawLose, drawLevelDone, COLORS,
+  drawSign, drawLevelBanner, drawTitle, drawPause, drawCrosshair, drawText, drawBubble, drawHud, drawLose, drawLevelDone, COLORS,
 } from './ui.js';
 import { UI, LINES } from './lines.js';
 
@@ -58,7 +60,7 @@ class TitleScreen {
   constructor() { this.time = 0; }
   update(dt) {
     this.time += dt;
-    if (input.wasPressed('confirm')) machine.replace(new PlayScreen());
+    if (input.wasPressed('confirm')) machine.replace(new PlayScreen(0));
   }
   draw(c) { drawTitle(c, this.time); }
 }
@@ -86,7 +88,7 @@ class LoseScreen {
   }
   update(dt) {
     this.time += dt;
-    if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) machine.replace(new PlayScreen());
+    if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) machine.replace(new PlayScreen(this.under.levelIndex));
   }
   draw(c) {
     this.under.draw(c);
@@ -98,6 +100,7 @@ class LevelDoneScreen {
   constructor(under) {
     this.under = under;
     this.time = 0;
+    this.next = under.levelIndex + 1; // после последнего — пока на титульный (Финал и Титры — этап 11)
     const { stats, score } = under.run;
     this.lines = [
       `${UI.score}: ${score}`,
@@ -109,17 +112,34 @@ class LevelDoneScreen {
   }
   update(dt) {
     this.time += dt;
-    if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) machine.replace(new PlayScreen());
+    if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) {
+      machine.replace(this.next < LEVELS.length ? new PlayScreen(this.next) : new TitleScreen());
+    }
   }
   draw(c) {
     this.under.draw(c);
-    drawLevelDone(c, this.lines, this.time >= RESULT_DELAY, this.time);
+    const prompt = this.next < LEVELS.length ? UI.next : UI.toTitle;
+    drawLevelDone(c, this.lines, prompt, this.time >= RESULT_DELAY, this.time);
   }
 }
 
+const LEVEL_BANNER_TIME = 2.5; // с, название Уровня на старте
+
+function makeCanvas(w, h) {
+  const cv = document.createElement('canvas');
+  cv.width = w;
+  cv.height = h;
+  return cv;
+}
+
 class PlayScreen {
-  constructor() {
-    this.map = buildTestMap(TILE_SIZE);
+  constructor(levelIndex = 0) {
+    this.levelIndex = levelIndex;
+    this.level = LEVELS[levelIndex];
+    this.map = this.level.build(TILE_SIZE);
+    this.parallax = buildParallax(this.level.theme, this.map.pixelWidth, SCREEN.width, SCREEN.height, makeCanvas, levelIndex + 1);
+    this.movers = createMovers(this.map.movers, TILE_SIZE);
+    this.riding = null; // Трамвай, на крыше которого стоит Никич
     this.n = createNikich(0, 0);
     this.cam = createCamera(SCREEN.width, SCREEN.height);
     this.shots = [];
@@ -135,7 +155,7 @@ class PlayScreen {
     this.items = itemsFromMap(this.map.items, TILE_SIZE);
     this.checkpoints = createCheckpoints(this.map);
     // Прохождение Уровня: таймер, очки, статистика (SPEC §4, §9)
-    this.run = { timer: createTimer(LEVEL.time), score: 0, stats: { kills: 0, shots: 0, deaths: 0, time: 0 } };
+    this.run = { timer: this.level.timed ? createTimer(LEVEL.time) : null, score: 0, stats: { kills: 0, shots: 0, deaths: 0, time: 0 } };
     this.stats = this.run.stats;
     this.over = false; // Уровень закончился — дальше не обновляем
     this.lowHealthSaid = false;
@@ -156,6 +176,7 @@ class PlayScreen {
     b.y = spawn.y + tileSize - b.h;
     b.vx = 0;
     b.vy = 0;
+    this.riding = null;
     this.cam.dir = 1;
     snapCamera(this.cam, b, this.map, CAMERA);
   }
@@ -288,9 +309,15 @@ class PlayScreen {
       n.aim = { x: n.facing, y: 0 };
     }
 
+    // Трамвай едет и везёт Никича, если тот на крыше
+    updateMovers(this.movers, dt);
+    if (this.riding) moveX(b, this.riding.dx, this.map);
+    const prevBottom = b.y + b.h;
     const ev = updateNikich(n, readMoveIntent(input), dt, this.map, PHYSICS);
+    const wasRiding = this.riding;
+    this.riding = landOnMovers(b, this.movers, prevBottom);
     if (ev.jumped) this.squash = -0.12;
-    if (ev.landed) this.squash = 0.1;
+    if (ev.landed || (this.riding && !wasRiding)) this.squash = 0.1;
     this.squash -= Math.sign(this.squash) * Math.min(Math.abs(this.squash), dt);
 
     // Атаки
@@ -346,7 +373,7 @@ class PlayScreen {
     }
 
     this.stats.time += dt;
-    if (updateTimer(this.run.timer, dt)) { this.finish(new LoseScreen(this, UI.loseTime)); return; }
+    if (this.run.timer && updateTimer(this.run.timer, dt)) { this.finish(new LoseScreen(this, UI.loseTime)); return; }
     if (reachedExit(this.map, b)) { this.finish(new LevelDoneScreen(this)); return; }
 
     updateCamera(this.cam, b, this.map, dt, CAMERA);
@@ -381,9 +408,11 @@ class PlayScreen {
     const camX = Math.round(this.cam.x);
     const camY = Math.round(this.cam.y);
 
-    drawSky(c);
+    drawParallax(c, this.parallax, camX, SCREEN.width, SCREEN.height);
     for (const d of this.doors) drawDoor(c, d.x, d.y, camX, camY);
+    for (const m of this.movers) drawTram(c, m, camX, camY);
     drawTiles(c, this.map, this.cam);
+    for (const h of this.map.hints) drawSign(c, UI[h.text], h.tx * TILE_SIZE + TILE_SIZE / 2 - camX, h.ty * TILE_SIZE - camY);
     for (const r of this.map.ramps) drawRamp(c, r.tx, r.ty, TILE_SIZE, camX, camY);
     for (const cp of this.checkpoints.list) drawCheckpoint(c, cp.x + TILE_SIZE / 2, cp.y + TILE_SIZE, cp.reached, camX, camY);
     for (const it of this.items) drawItem(c, it, camX, camY, ITEMS);
@@ -414,9 +443,17 @@ class PlayScreen {
       ef.beer > 0 && { label: UI.effectBeer, left: ef.beer, color: '#e76f51' },
       ef.scooter > 0 && { label: UI.effectScooter, left: ef.scooter, color: '#f4d35e' },
     ].filter(Boolean);
-    const hudRun = { timeText: formatTime(timer.left), lowTime: timer.left <= LEVEL.lowTime, score: this.run.score };
+    const hudRun = {
+      timeText: timer ? formatTime(timer.left) : null,
+      lowTime: !!timer && timer.left <= LEVEL.lowTime,
+      score: this.run.score,
+    };
     drawHud(c, this.n, ATTACKS, this.time, hudRun, effects);
     drawText(c, UI.controlsHint, 4, SCREEN.height - 11, { size: 7 });
+    if (this.time < LEVEL_BANNER_TIME) {
+      const label = `${UI.levelLabel} ${this.levelIndex + 1}`;
+      drawLevelBanner(c, label, UI.levelNames[this.levelIndex], Math.min(1, (LEVEL_BANNER_TIME - this.time) / 0.5));
+    }
     if (this.debug) this.drawDebug(c);
     if (input.mouse.inside) drawCrosshair(c, input.mouse.x, input.mouse.y);
   }
@@ -443,6 +480,7 @@ class PlayScreen {
       `x ${b.x.toFixed(1)} y ${b.y.toFixed(1)}`,
       `vx ${b.vx.toFixed(0)} vy ${b.vy.toFixed(0)}`,
       `ground ${b.onGround ? 'да' : 'нет'} coyote ${b.coyote.toFixed(2)} buf ${b.jumpBuffer.toFixed(2)}`,
+      `уровень ${this.levelIndex + 1} тайл ${Math.floor((b.x + b.w / 2) / TILE_SIZE)} трамвай ${this.riding ? 'да' : 'нет'}`,
       `kills ${this.stats.kills} super ${this.n.superMeter.toFixed(0)} зожники ${this.zozniki.length}`,
     ];
     lines.forEach((l, i) => drawText(c, l, 4, 28 + i * 10, { color: COLORS.accent }));
@@ -485,6 +523,7 @@ if (new URLSearchParams(location.search).has('debug')) {
   window.__game = {
     machine,
     input,
+    level: (n) => machine.replace(new PlayScreen(n - 1)), // __game.level(3) — сразу на Уровень 3
     step: (n = 1) => {
       for (let i = 0; i < n; i++) { machine.top().update(LOOP.step); input.endStep(); }
       machine.top().draw(ctx);

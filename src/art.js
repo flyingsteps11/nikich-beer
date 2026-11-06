@@ -202,6 +202,20 @@ export function drawRamp(c, tx, ty, ts, camX, camY) {
   }
 }
 
+// Трамвай: крыша — платформа (m.y), корпус ниже до колёс; красно-жёлтый, как варшавский
+export function drawTram(c, m, camX, camY) {
+  const x = Math.round(m.x - camX);
+  const y = Math.round(m.y - camY);
+  rect(c, x + m.w / 2 - 6, y - 6, 1, 6, '#3a3a3a'); // пантограф
+  rect(c, x + m.w / 2 - 8, y - 7, 12, 1, '#3a3a3a');
+  rect(c, x, y, m.w, 3, '#adb5bd'); // крыша
+  rect(c, x, y + 3, m.w, m.h - 9, '#d62828'); // корпус
+  rect(c, x, y + 8, m.w, 9, '#f1c453'); // жёлтая полоса с окнами
+  for (let wx = x + 4; wx < x + m.w - 10; wx += 14) rect(c, wx, y + 9, 10, 7, '#1b263b');
+  rect(c, x, y + m.h - 6, m.w, 2, '#6c1515');
+  for (const wx of [x + 8, x + m.w - 16]) rect(c, wx, y + m.h - 4, 8, 4, '#1b1b1b'); // колёса
+}
+
 // ---------- Предметы (SPEC §7) ----------
 
 function drawScooterUnder(c, feetX, feetY, f, time) {

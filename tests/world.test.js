@@ -5,6 +5,7 @@ import { TILE, createBody } from '../src/physics.js';
 import {
   parseMap, createMap, createCamera, updateCamera, snapCamera,
   createTimer, updateTimer, formatTime, createCheckpoints, updateCheckpoints, reachedExit,
+  createMovers, updateMovers, landOnMovers, layerWidth, seededRandom,
 } from '../src/world.js';
 import { CAMERA, SCREEN, TILE_SIZE, LOOP, MAP_HEIGHT_TILES } from '../src/config.js';
 import { buildTestMap } from '../src/levels/test.js';
@@ -175,4 +176,77 @@ test('выход: Уровень пройден у столбца выхода',
   assert.equal(reachedExit(map, b), false);
   b.x = 90 * TS;
   assert.equal(reachedExit(map, b), true);
+});
+
+// ---------- Трамвай ----------
+
+function tram() {
+  return createMovers([{ tx0: 2, tx1: 6, ty: 10, w: 3, h: 2, speed: 40, pause: 1 }], TS)[0];
+}
+
+test('Трамвай: стоит на конечной, едет до другой, разворачивается', () => {
+  const m = tram();
+  updateMovers([m], 0.5);
+  assert.equal(m.x, 2 * TS, 'стоянка');
+  updateMovers([m], 0.5); // стоянка кончилась
+  let t = 0;
+  while (m.x < 6 * TS && t < 5) { updateMovers([m], LOOP.step); t += LOOP.step; }
+  assert.equal(m.x, 6 * TS);
+  assert.ok(Math.abs(t - (4 * TS) / 40) < 0.05, `доехал за ${t.toFixed(2)} с`);
+  assert.equal(m.dir, -1);
+  updateMovers([m], 0.5);
+  assert.equal(m.dx, 0, 'на конечной стоит');
+});
+
+test('Трамвай: сдвиг за шаг — чтобы везти того, кто на крыше', () => {
+  const m = tram();
+  m.wait = 0;
+  updateMovers([m], 0.1);
+  assert.ok(Math.abs(m.dx - 4) < 1e-9);
+});
+
+test('на крышу Трамвая приземляются сверху, снизу — пролетают', () => {
+  const m = tram();
+  const b = createBody(m.x + 4, m.y - 22 + 3, 10, 22); // ноги чуть ниже крыши после шага падения
+  b.vy = 120;
+  assert.equal(landOnMovers(b, [m], m.y - 1), m);
+  assert.equal(b.y + b.h, m.y);
+  assert.equal(b.onGround, true);
+  assert.equal(b.groundTile, TILE.THIN);
+
+  const up = createBody(m.x + 4, m.y - 10, 10, 22);
+  up.vy = -200; // прыжок снизу сквозь крышу
+  assert.equal(landOnMovers(up, [m], m.y + 12), null);
+
+  const below = createBody(m.x + 4, m.y - 10, 10, 22);
+  below.vy = 50; // был ниже крыши — не выдёргиваем наверх
+  assert.equal(landOnMovers(below, [m], m.y + 12), null);
+
+  const aside = createBody(m.x + m.w + 2, m.y - 21, 10, 22);
+  aside.vy = 50;
+  assert.equal(landOnMovers(aside, [m], m.y - 1), null, 'мимо крыши');
+});
+
+test('с крыши Трамвая можно спрыгнуть через S', () => {
+  const m = tram();
+  const b = createBody(m.x + 4, m.y - 21, 10, 22);
+  b.vy = 20;
+  b.dropTimer = 0.1;
+  assert.equal(landOnMovers(b, [m], m.y), null);
+});
+
+// ---------- Параллакс ----------
+
+test('слой параллакса: экран плюс путь слоя за Уровень', () => {
+  assert.equal(layerWidth(3200, 480, 0), 482);
+  assert.equal(layerWidth(3200, 480, 0.5), 480 + 1360 + 2);
+  assert.equal(layerWidth(480, 480, 0.3), 482, 'арена — без прокрутки');
+});
+
+test('генератор фона детерминирован: тот же Уровень — тот же фон', () => {
+  const a = seededRandom(7);
+  const b = seededRandom(7);
+  const xs = Array.from({ length: 5 }, () => a());
+  assert.deepEqual(xs, Array.from({ length: 5 }, () => b()));
+  assert.ok(xs.every((x) => x >= 0 && x < 1));
 });
