@@ -87,9 +87,69 @@ export const ATTACKS = Object.freeze({
   }),
 });
 
-// Зожники (SPEC §6). На этапе 2 — только манекен для проверки атак.
+// Зожники (SPEC §6). health, speed, touchDamage — из спеки; остальное — настройка поведения.
 export const ZOZNIKI = Object.freeze({
-  dummy: Object.freeze({ health: 100, w: 12, h: 22, respawnTime: 2 }),
+  runner: Object.freeze({ // Бегун
+    health: 20, speed: 100, touchDamage: 10,
+    w: 10, h: 22, accel: 900,
+    jumpTiles: 2.5, // высота прыжка через препятствие
+    obstacleMaxTiles: 2, // выше — не прыгает
+  }),
+  cyclist: Object.freeze({ // Велосипедист
+    health: 30, speed: 200, touchDamage: 20,
+    w: 18, h: 20, accel: 350,
+    triggerRange: 280, // px по горизонтали — начинает рывок
+    triggerHeight: 64, // px по вертикали
+    dashDistance: 380, // px — «через весь экран»
+    brakeTime: 1, // с торможения (SPEC §6)
+    brakeDecel: 400,
+  }),
+  moto: Object.freeze({ // Мотоциклист
+    health: 60, speed: 240, touchDamage: 30,
+    w: 22, h: 20, accel: 380,
+    triggerRange: 300,
+    triggerHeight: 80,
+    dashDistance: 440,
+    brakeTime: 1,
+    brakeDecel: 450,
+    rampJumpVelocity: 330, // px/с вверх с трамплина
+    jokeChance: 0.5, // шанс шутки Никича про мотоциклистов при рывке
+  }),
+  yoga: Object.freeze({ // Йога-тётка
+    health: 40, speed: 40, touchDamage: 5,
+    w: 12, h: 20, accel: 300,
+    aggroRange: 140, // px — выходит из позы и идёт к Никичу
+    lectureRange: 26, // px — начинает лекцию про чакры
+    lectureStun: 1, // с оглушения Никича (SPEC §6)
+    lectureTime: 1.2, // с стоит и вещает
+    lectureCooldown: 3,
+  }),
+  smoothie: Object.freeze({ // Смузи-хипстер
+    health: 25, speed: 60, touchDamage: 0, projectileDamage: 10,
+    w: 10, h: 22, accel: 500,
+    minDistance: 90, // ближе — отходит
+    maxDistance: 160, // дальше — подходит
+    throwRange: 220,
+    throwCooldown: 2,
+    projectileGravity: 600,
+    flightPerPx: 1 / 180, // с полёта на px расстояния
+    minFlight: 0.5,
+    maxFlight: 1.1,
+    projectileLife: 3,
+  }),
+  dummy: Object.freeze({ health: 100, speed: 0, touchDamage: 0, w: 12, h: 22, accel: 0, respawnTime: 2 }), // манекен для тестов
+});
+
+export const DROPS = Object.freeze({
+  beerZeroChance: 0.1, // SPEC §6: с убитого Зожника выпадает Пиво 0,0
+});
+
+export const SPAWN = Object.freeze({
+  maxAlive: 12, // больше Зожников одновременно не бывает (SPEC §18: 60 fps при максимуме)
+  edgeOffset: 12, // px за правым краем экрана
+  activationMargin: 96, // px вокруг экрана, где оживают двери и точки
+  despawnBehind: 480, // px позади экрана — Зожник исчезает
+  surfaceSearchTiles: 6, // сколько тайлов вправо искать опору у края экрана
 });
 
 export const HIT_FLASH_TIME = 0.1; // с, Зожник мигает от попадания

@@ -1,15 +1,19 @@
 // Игровой цикл с фиксированным шагом 1/60 и машина экранов (SPEC §15).
-// Этап 2: титульный экран → тестовая карта с Никичем, 4 атаками и манекенами → пауза.
+// Этап 3: титульный экран → тестовая карта с Никичем, 4 атаками и Зожниками → пауза.
 
-import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, ZOZNIKI, EFFECTS } from './config.js';
+import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH } from './config.js';
 import { Input, bindInput, readMoveIntent } from './input.js';
 import { fellOut } from './physics.js';
 import { createCamera, updateCamera, snapCamera, drawTiles } from './world.js';
 import {
   createNikich, setAim, updateNikich, tryShoot, updateShots, tryDog, updateDogs,
-  tryStun, trySuper, createSpeech, say, updateSpeech, pick,
+  tryStun, trySuper, createSpeech, say, updateSpeech, pick, stunNikich, takeDamage,
 } from './nikich.js';
-import { createZoznik, updateZoznik } from './zozniki.js';
+import {
+  updateZoznik, updateEnemyShots, contactDamage, createSpawner, updateSpawner, resetSpawner,
+  spawnFromRequest, isFarBehind,
+} from './zozniki.js';
+import { drawNikich, drawZoznik, drawDog, drawShot, drawSmoothieShot, drawDoor, drawRamp } from './art.js';
 import { buildTestMap } from './levels/test.js';
 import { drawSky, drawTitle, drawPause, drawCrosshair, drawText, drawBubble, drawHud, COLORS } from './ui.js';
 import { UI, LINES } from './lines.js';
@@ -68,10 +72,12 @@ class PlayScreen {
     this.cam = createCamera(SCREEN.width, SCREEN.height);
     this.shots = [];
     this.dogs = [];
-    this.zozniki = this.map.dummies.map(({ tx, ty }) => {
-      const k = ZOZNIKI.dummy;
-      return createZoznik('dummy', tx * TILE_SIZE + (TILE_SIZE - k.w) / 2, (ty + 1) * TILE_SIZE - k.h);
-    });
+    this.zozniki = [];
+    this.enemyShots = [];
+    this.spawner = createSpawner(this.map.spawns, TILE_SIZE);
+    this.doors = this.map.spawns
+      .filter((d) => d.type === 'door')
+      .map((d) => ({ x: d.tx * TILE_SIZE + TILE_SIZE / 2, y: (d.ty + 1) * TILE_SIZE }));
     this.speech = createSpeech();
     this.effects = { rings: [], floaters: [], shake: 0, flash: 0 };
     this.stats = { kills: 0 };
@@ -92,6 +98,66 @@ class PlayScreen {
     b.vy = 0;
     this.cam.dir = 1;
     snapCamera(this.cam, b, this.map, CAMERA);
+  }
+
+  // Потеря жизни: назад на старт, Зожники и снаряды исчезают, волны впереди снова ждут
+  loseLife() {
+    this.zozniki = [];
+    this.enemyShots = [];
+    this.shots = [];
+    this.dogs = [];
+    this.respawn();
+    resetSpawner(this.spawner, this.body.x);
+  }
+
+  hurt(amount, fromX) {
+    const r = takeDamage(this.n, amount, fromX);
+    if (!r.hit) return;
+    if (r.gameOver) { machine.replace(new PlayScreen()); return; }
+    if (r.lifeLost) { this.loseLife(); return; }
+    say(this.speech, pick(LINES.hit));
+  }
+
+  updateZozniki(dt) {
+    const n = this.n;
+    const b = this.body;
+    const view = this.view();
+    for (const req of updateSpawner(this.spawner, dt, {
+      map: this.map, view, nikichX: b.x + b.w / 2, nikichFeetY: b.y + b.h, alive: this.zozniki.length,
+    })) {
+      this.zozniki.push(spawnFromRequest(req));
+    }
+    for (const z of this.zozniki) {
+      for (const e of updateZoznik(z, dt, this.map, PHYSICS, b)) {
+        if (e.type === 'lecture') {
+          stunNikich(n, e.stun);
+          z.bubble = { text: pick(LINES.yoga), t: SPEECH.holdTime };
+        } else if (e.type === 'throw') {
+          this.enemyShots.push(e.shot);
+        } else if (e.type === 'joke') {
+          say(this.speech, pick(LINES.moto));
+        }
+      }
+      if (z.bubble && (z.bubble.t -= dt) <= 0) z.bubble = null;
+    }
+    // Убитые и отставшие далеко позади исчезают
+    this.zozniki = this.zozniki.filter((z) => z.alive && !isFarBehind(z, view));
+  }
+
+  // Урон по Никичу: касание Зожника и смузи
+  updateDanger(dt) {
+    const b = this.body;
+    for (const h of updateEnemyShots(this.enemyShots, dt, this.map, b)) {
+      this.hurt(h.damage, h.x);
+      if (machine.top() !== this) return;
+    }
+    for (const z of this.zozniki) {
+      const dmg = contactDamage(z, b);
+      if (dmg > 0) {
+        this.hurt(dmg, z.body.x + z.body.w / 2);
+        if (machine.top() !== this || this.zozniki.length === 0) return;
+      }
+    }
   }
 
   mouseWorld() {
@@ -173,7 +239,9 @@ class PlayScreen {
     for (const e of updateDogs(n, this.dogs, dt, this.map, this.zozniki, PHYSICS)) {
       if (e.type === 'kill') this.onKill();
     }
-    for (const z of this.zozniki) updateZoznik(z, dt, this.map, PHYSICS);
+    this.updateZozniki(dt);
+    this.updateDanger(dt);
+    if (machine.top() !== this) return;
 
     if (fellOut(b, this.map)) {
       this.respawn();
@@ -207,12 +275,18 @@ class PlayScreen {
     const camY = Math.round(this.cam.y);
 
     drawSky(c);
+    for (const d of this.doors) drawDoor(c, d.x, d.y, camX, camY);
     drawTiles(c, this.map, this.cam);
-    for (const z of this.zozniki) this.drawZoznik(c, z, camX, camY);
-    for (const d of this.dogs) this.drawDog(c, d, camX, camY);
-    this.drawNikich(c);
-    this.drawShots(c, camX, camY);
+    for (const r of this.map.ramps) drawRamp(c, r.tx, r.ty, TILE_SIZE, camX, camY);
+    for (const z of this.zozniki) drawZoznik(c, z, camX, camY, this.time, COLORS);
+    for (const d of this.dogs) drawDog(c, d, camX, camY, this.time);
+    drawNikich(c, this.n, camX, camY, this.time, this.squash);
+    for (const s of this.shots) drawShot(c, s, camX, camY);
+    for (const s of this.enemyShots) drawSmoothieShot(c, s, camX, camY);
     this.drawEffects(c, camX, camY);
+    for (const z of this.zozniki) {
+      if (z.bubble) drawBubble(c, z.bubble.text, z.body.x + z.body.w / 2 - camX, z.body.y - camY - 8);
+    }
 
     const b = this.body;
     if (this.speech.text) drawBubble(c, this.speech.text, b.x + b.w / 2 - camX, b.y - camY - 4);
@@ -230,17 +304,6 @@ class PlayScreen {
     if (input.mouse.inside) drawCrosshair(c, input.mouse.x, input.mouse.y);
   }
 
-  drawShots(c, camX, camY) {
-    for (const s of this.shots) {
-      const x = Math.round(s.x - camX);
-      const y = Math.round(s.y - camY);
-      c.fillStyle = '#f4f1de';
-      c.fillRect(x - 1, y, 3, 1);
-      c.fillStyle = '#ff7b00';
-      c.fillRect(x + (s.vx >= 0 ? 2 : -2), y, 1, 1);
-    }
-  }
-
   drawEffects(c, camX, camY) {
     for (const r of this.effects.rings) {
       const k = 1 - r.t / EFFECTS.stunRingTime;
@@ -256,93 +319,6 @@ class PlayScreen {
     }
   }
 
-  // Манекен-Зожник: спортивный костюм, повязка (настоящие спрайты — этап 8)
-  drawZoznik(c, z, camX, camY) {
-    if (!z.alive) return;
-    const b = z.body;
-    const x = Math.round(b.x - camX);
-    const y = Math.round(b.y - camY);
-    const white = z.flash > 0;
-    c.fillStyle = white ? '#ffffff' : '#2a9d8f';
-    c.fillRect(x, y + 7, b.w, b.h - 7);
-    c.fillStyle = white ? '#ffffff' : '#f0c8a0';
-    c.fillRect(x + 2, y, b.w - 4, 7);
-    c.fillStyle = white ? '#ffffff' : '#e63946';
-    c.fillRect(x + 2, y + 1, b.w - 4, 1);
-    if (z.held > 0) {
-      c.fillStyle = '#ffffff';
-      c.fillRect(x - 1, y + b.h - 6, b.w + 2, 1);
-    }
-    if (z.stun > 0) {
-      const t = this.time * 8;
-      c.fillStyle = COLORS.accent;
-      for (let i = 0; i < 3; i++) {
-        const a = t + (i * Math.PI * 2) / 3;
-        c.fillRect(Math.round(x + b.w / 2 + Math.cos(a) * 6), Math.round(y - 3 + Math.sin(a) * 2), 2, 2);
-      }
-    }
-    if (z.health < z.maxHealth) {
-      c.fillStyle = COLORS.shadow;
-      c.fillRect(x - 2, y - 7, b.w + 4, 3);
-      c.fillStyle = '#e63946';
-      c.fillRect(x - 1, y - 6, Math.round((b.w + 2) * (z.health / z.maxHealth)), 1);
-    }
-  }
-
-  drawDog(c, d, camX, camY) {
-    const b = d.body;
-    const x = Math.round(b.x - camX);
-    const y = Math.round(b.y - camY);
-    const run = d.state === 'run' ? Math.floor(this.time * 14) % 2 : 0;
-    c.fillStyle = '#8b5a2b';
-    c.fillRect(x, y + 2, b.w, b.h - 4);
-    const hx = d.dir > 0 ? x + b.w - 4 : x;
-    c.fillRect(hx, y, 4, 4);
-    c.fillStyle = '#5a3a1a';
-    c.fillRect(x + 1 + run, y + b.h - 2, 2, 2);
-    c.fillRect(x + b.w - 3 - run, y + b.h - 2, 2, 2);
-    c.fillRect(d.dir > 0 ? x - 2 : x + b.w, y + 2, 2, 1); // хвост
-  }
-
-  // Болванка Никича 16×24 поверх хитбокса 10×22 (настоящий спрайт — этап 8)
-  drawNikich(c) {
-    const n = this.n;
-    const b = n.body;
-    if (n.invuln > 0 && Math.floor(this.time * 20) % 2 === 0) return;
-    const sx = 1 + this.squash * 2;
-    const sy = 1 - this.squash * 2;
-    const w = Math.round(16 * sx);
-    const h = Math.round(24 * sy);
-    const feetX = Math.round(b.x + b.w / 2 - this.cam.x);
-    const feetY = Math.round(b.y + b.h - this.cam.y);
-    const x = feetX - Math.floor(w / 2);
-    const y = feetY - h;
-    const moving = b.onGround && Math.abs(b.vx) > 20;
-    const bob = moving ? Math.floor(this.time * 10) % 2 : 0;
-    const f = n.facing;
-
-    c.fillStyle = '#e9c8a0'; // ноги
-    const step = moving ? Math.floor(this.time * 10) % 2 : 0;
-    c.fillRect(x + 4 + step * 2, y + h - 5, 3, 5);
-    c.fillRect(x + w - 7 - step * 2, y + h - 5, 3, 5);
-    c.fillStyle = '#c8b28a'; // шорты
-    c.fillRect(x + 3, y + h - 10 + bob, w - 6, 5);
-    c.fillStyle = '#8a8d91'; // футболка
-    c.fillRect(x + 2, y + Math.round(h * 0.38) + bob, w - 4, Math.round(h * 0.2) + 2);
-    c.fillStyle = '#f0c8a0'; // голова
-    c.fillRect(x + 3, y + 1 + bob, w - 6, Math.round(h * 0.36));
-    c.fillStyle = '#2a2018'; // волосы
-    c.fillRect(x + 3, y + bob, w - 6, 3);
-    c.fillRect(f > 0 ? x + 3 : x + w - 5, y + bob, 2, 5);
-    c.fillStyle = '#1b1b1b'; // авиаторы
-    c.fillRect(f > 0 ? x + w - 9 : x + 4, y + 5 + bob, 5, 2);
-    // рука к прицелу
-    const hx = feetX;
-    const hy = feetY - b.h + 9;
-    c.fillStyle = '#f0c8a0';
-    c.fillRect(Math.round(hx + n.aim.x * 7) - 1, Math.round(hy + n.aim.y * 7) - 1, 2, 2);
-  }
-
   drawDebug(c) {
     const b = this.body;
     const lines = [
@@ -350,7 +326,7 @@ class PlayScreen {
       `x ${b.x.toFixed(1)} y ${b.y.toFixed(1)}`,
       `vx ${b.vx.toFixed(0)} vy ${b.vy.toFixed(0)}`,
       `ground ${b.onGround ? 'да' : 'нет'} coyote ${b.coyote.toFixed(2)} buf ${b.jumpBuffer.toFixed(2)}`,
-      `kills ${this.stats.kills} super ${this.n.superMeter.toFixed(0)}`,
+      `kills ${this.stats.kills} super ${this.n.superMeter.toFixed(0)} зожники ${this.zozniki.length}`,
     ];
     lines.forEach((l, i) => drawText(c, l, 4, 28 + i * 10, { color: COLORS.accent }));
     c.strokeStyle = '#00ff88';

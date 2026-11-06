@@ -1,4 +1,4 @@
-// Тестовая карта движка (этап 1): все типы тайлов, Ямы, потолок, лестницы.
+// Тестовая карта движка: все типы тайлов, Ямы, потолок, лестницы, появление Зожников.
 // В игру не входит — Уровни 1–5 появятся на этапе 5.
 
 import { TILE } from '../physics.js';
@@ -61,19 +61,19 @@ export function buildTestMap(tileSize) {
 
   m.spawn = { x: 3 * tileSize, y: (GROUND - 1) * tileSize };
 
-  // Манекены для проверки атак: тайл, на котором стоят ноги (ряд над полом/платформой)
-  m.dummies = [
-    { tx: 8, ty: GROUND - 1 },
-    { tx: 19, ty: GROUND - 1 }, // кучка под платформой — для 5:0 и супера
-    { tx: 20, ty: GROUND - 1 },
-    { tx: 21, ty: GROUND - 1 },
-    { tx: 26, ty: 6 }, // на высокой тонкой платформе — для прицела вверх
-    { tx: 41, ty: GROUND - 1 },
-    { tx: 48, ty: GROUND - 1 }, // в тоннеле
-    { tx: 66, ty: GROUND - 1 },
-    { tx: 72, ty: 7 },
-    { tx: 93, ty: 10 }, // на плато
-    { tx: 108, ty: GROUND - 1 },
+  // Трамплин перед третьей Ямой: Мотоциклист перелетает её дугой
+  m.ramps = [{ tx: 117, ty: GROUND - 1 }];
+
+  // Появление Зожников (SPEC §6): волны с края, подъезд, точки
+  m.spawns = [
+    { type: 'edge', atTx: 6, kinds: ['runner', 'runner'], interval: 0.8 },
+    { type: 'point', tx: 26, ty: 6, kind: 'yoga' }, // на высокой тонкой платформе
+    { type: 'door', tx: 42, ty: GROUND - 1, kinds: ['runner', 'smoothie'], every: 4, count: 4 },
+    { type: 'edge', atTx: 60, kinds: ['smoothie', 'runner'], interval: 1 },
+    { type: 'point', tx: 72, ty: 7, kind: 'yoga' },
+    { type: 'edge', atTx: 84, kinds: ['cyclist'], interval: 0.5 },
+    { type: 'edge', atTx: 100, kinds: ['moto'], interval: 0.5 },
+    { type: 'edge', atTx: 118, kinds: ['runner', 'smoothie', 'runner', 'cyclist'], interval: 0.7 },
   ];
   return m;
 }

@@ -12,6 +12,7 @@ export function createNikich(x, y, N = NIKICH) {
     lives: N.lives,
     invuln: 0,
     hurtLock: 0,
+    stun: 0, // оглушён (лекция Йога-тётки, падение с Самоката): ни движения, ни атак
     facing: 1,
     aim: { x: 1, y: 0 }, // единичный вектор на курсор
     cooldowns: { shot: 0, dog: 0, stun: 0 },
@@ -49,8 +50,18 @@ export function updateNikich(n, intent, dt, map, P) {
   for (const k of Object.keys(n.cooldowns)) n.cooldowns[k] = Math.max(0, n.cooldowns[k] - dt);
   n.invuln = Math.max(0, n.invuln - dt);
   n.hurtLock = Math.max(0, n.hurtLock - dt);
-  const effective = n.hurtLock > 0 ? { ...intent, move: 0, jumpPressed: false } : intent;
+  n.stun = Math.max(0, n.stun - dt);
+  const locked = n.hurtLock > 0 || n.stun > 0;
+  const effective = locked ? { ...intent, move: 0, jumpPressed: false } : intent;
   return stepPlatformer(n.body, effective, dt, map, P);
+}
+
+export function stunNikich(n, duration) {
+  n.stun = Math.max(n.stun, duration);
+}
+
+function canAttack(n) {
+  return n.stun <= 0;
 }
 
 // Урон Зожнику от Никича: множитель уже учтён в amount; шкала супера копится от снятого здоровья.
@@ -73,7 +84,7 @@ function overlaps(a, b) {
 // ---------- Щелбан ----------
 
 export function tryShoot(n, A = ATTACKS, N = NIKICH) {
-  if (n.cooldowns.shot > 0) return null;
+  if (n.cooldowns.shot > 0 || !canAttack(n)) return null;
   const S = A.shot;
   n.cooldowns.shot = S.cooldown / n.mods.shotRateMul;
   const h = handPos(n, N);
@@ -116,7 +127,7 @@ export function updateShots(n, shots, dt, map, zozniki) {
 // ---------- Собака ----------
 
 export function tryDog(n, aimWorldX, A = ATTACKS, N = NIKICH) {
-  if (n.cooldowns.dog > 0) return null;
+  if (n.cooldowns.dog > 0 || !canAttack(n)) return null;
   const D = A.dog;
   n.cooldowns.dog = D.cooldown;
   const h = handPos(n, N);
@@ -181,7 +192,7 @@ function distToBox(px, py, b) {
 }
 
 export function tryStun(n, zozniki, A = ATTACKS) {
-  if (n.cooldowns.stun > 0) return null;
+  if (n.cooldowns.stun > 0 || !canAttack(n)) return null;
   const S = A.stun;
   n.cooldowns.stun = S.cooldown;
   const radius = S.radius * n.mods.stunRadiusMul;
@@ -204,7 +215,7 @@ export function canSuper(n, A = ATTACKS) {
 
 // view — прямоугольник экрана в мировых координатах
 export function trySuper(n, zozniki, view, A = ATTACKS) {
-  if (!canSuper(n, A)) return null;
+  if (!canSuper(n, A) || !canAttack(n)) return null;
   n.superMeter = 0;
   const hits = [];
   for (const z of zozniki) {

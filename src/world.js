@@ -12,6 +12,8 @@ export function createMap(width, height, tileSize) {
     pixelWidth: width * tileSize,
     pixelHeight: height * tileSize,
     spawn: { x: tileSize, y: 0 },
+    ramps: [], // трамплины для Мотоциклиста: клетка {tx, ty}, в которой стоят колёса
+    spawns: [], // записи появления Зожников (см. createSpawner в zozniki.js)
     // За левым и правым краем — стена, над картой и под ней — пусто (там Яма).
     get(tx, ty) {
       if (tx < 0 || tx >= width) return TILE.SOLID;

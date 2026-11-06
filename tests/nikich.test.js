@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   createNikich, setAim, updateNikich, handPos,
   tryShoot, updateShots, tryDog, updateDogs, tryStun, trySuper, canSuper,
-  takeDamage, createSpeech, say, updateSpeech, applyDamage,
+  takeDamage, createSpeech, say, updateSpeech, applyDamage, stunNikich,
 } from '../src/nikich.js';
 import { createZoznik } from '../src/zozniki.js';
 import { parseMap } from '../src/world.js';
@@ -320,4 +320,20 @@ test('реплики: force перебивает ограничение', () => 
   say(s, 'раз');
   assert.equal(say(s, 'ПАМАГИТЕ', { force: true }), true);
   assert.equal(s.text, 'ПАМАГИТЕ');
+});
+
+test('оглушённый Никич (лекция) не ходит и не атакует, потом снова может', () => {
+  const map = arena();
+  const n = nikichAt(map, 5 * TS);
+  stunNikich(n, 1);
+  const x = n.body.x;
+  for (let i = 0; i < 30; i++) updateNikich(n, { ...IDLE, move: 1, jumpPressed: true }, DT, map, PHYSICS);
+  assert.equal(n.body.x, x);
+  assert.equal(tryShoot(n), null);
+  assert.equal(tryDog(n, n.body.x + 50), null);
+  assert.equal(tryStun(n, []), null);
+  for (let i = 0; i < 31; i++) updateNikich(n, IDLE, DT, map, PHYSICS);
+  for (let i = 0; i < 10; i++) updateNikich(n, { ...IDLE, move: 1 }, DT, map, PHYSICS);
+  assert.ok(n.body.x > x);
+  assert.notEqual(tryShoot(n), null);
 });
