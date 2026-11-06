@@ -1,4 +1,4 @@
-// Тестовая карта движка: все типы тайлов, Ямы, потолок, лестницы, появление Зожников.
+// Тестовая карта движка: все типы тайлов, Ямы, потолок, лестницы, Зожники, Предметы, Контрольные точки.
 // В игру не входит — Уровни 1–5 появятся на этапе 5.
 
 import { TILE } from '../physics.js';
@@ -60,6 +60,29 @@ export function buildTestMap(tileSize) {
   m.fill(134, 11, 136, 14, DECOR);
 
   m.spawn = { x: 3 * tileSize, y: (GROUND - 1) * tileSize };
+
+  // Контрольные точки (ряд ног) и выход у «двери»
+  m.checkpoints = [
+    { tx: 40, ty: GROUND - 1 },
+    { tx: 86, ty: GROUND - 1 },
+    { tx: 118, ty: GROUND - 1 },
+  ];
+  m.exit = { tx: 134 };
+
+  // Предметы: ty — ряд, где висит предмет
+  m.items = [
+    { type: 'hotdog', tx: 8, ty: 13 },
+    { type: 'chip', tx: 26, ty: 5 }, // на высокой платформе — награда за прыжки
+    { type: 'cigarette', tx: 47, ty: 13 }, // в тоннеле
+    { type: 'vodka', tx: 56, ty: 7 },
+    { type: 'chip', tx: 58, ty: 6 }, // на колонне
+    { type: 'beerZero', tx: 62, ty: GROUND - 1 },
+    { type: 'chip', tx: 72, ty: 6 },
+    { type: 'hotdog', tx: 80, ty: 11 }, // над кочкой в широкой Яме
+    { type: 'cigarette', tx: 93, ty: 10 }, // на плато
+    { type: 'scooter', tx: 98, ty: GROUND - 1 }, // дальше Барьер и Яма — на Самокате пролетаются
+    { type: 'beerZero', tx: 125, ty: GROUND - 1 },
+  ];
 
   // Трамплин перед третьей Ямой: Мотоциклист перелетает её дугой
   m.ramps = [{ tx: 117, ty: GROUND - 1 }];

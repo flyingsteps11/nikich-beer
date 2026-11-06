@@ -14,6 +14,9 @@ export function createMap(width, height, tileSize) {
     spawn: { x: tileSize, y: 0 },
     ramps: [], // трамплины для Мотоциклиста: клетка {tx, ty}, в которой стоят колёса
     spawns: [], // записи появления Зожников (см. createSpawner в zozniki.js)
+    items: [], // предметы на месте: { type, tx, ty } (см. items.js)
+    checkpoints: [], // Контрольные точки: { tx, ty } — ряд, в котором стоят ноги
+    exit: null, // зона выхода: { tx } — дошёл до этого столбца, Уровень пройден
     // За левым и правым краем — стена, над картой и под ней — пусто (там Яма).
     get(tx, ty) {
       if (tx < 0 || tx >= width) return TILE.SOLID;
@@ -59,6 +62,57 @@ export function parseMap(rows, tileSize, legend = DEFAULT_LEGEND) {
     }
   });
   return map;
+}
+
+// ---------- Таймер Уровня (SPEC §9) ----------
+
+export function createTimer(seconds) {
+  return { left: seconds, expired: false };
+}
+
+// true — ровно в тот шаг, когда время вышло
+export function updateTimer(timer, dt) {
+  if (timer.expired) return false;
+  timer.left = Math.max(0, timer.left - dt);
+  if (timer.left <= 0) {
+    timer.expired = true;
+    return true;
+  }
+  return false;
+}
+
+// «мм:сс», округление вверх: 0:01 показывается до самого конца
+export function formatTime(seconds) {
+  const s = Math.ceil(Math.max(0, seconds) - 1e-9);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// ---------- Контрольные точки и выход ----------
+
+// Старт Уровня — нулевая точка; дальше по возрастанию x
+export function createCheckpoints(map) {
+  const ts = map.tileSize;
+  const list = map.checkpoints
+    .map((c) => ({ x: c.tx * ts, y: c.ty * ts, tx: c.tx, reached: false }))
+    .sort((a, b) => a.x - b.x);
+  return { list, current: { x: map.spawn.x, y: map.spawn.y } };
+}
+
+// Никич дошёл до точки — она становится местом возврата. Возвращает новую точку или null.
+export function updateCheckpoints(cp, body) {
+  let reached = null;
+  for (const c of cp.list) {
+    if (!c.reached && body.x + body.w / 2 >= c.x) {
+      c.reached = true;
+      cp.current = { x: c.x, y: c.y };
+      reached = c;
+    }
+  }
+  return reached;
+}
+
+export function reachedExit(map, body) {
+  return !!map.exit && body.x + body.w / 2 >= map.exit.tx * map.tileSize;
 }
 
 // ---------- Камера ----------

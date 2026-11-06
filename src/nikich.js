@@ -2,7 +2,7 @@
 
 import { createBody, stepPlatformer, isBlocking, fellOut } from './physics.js';
 import { damageZoznik, stunZoznik, holdZoznik } from './zozniki.js';
-import { NIKICH, ATTACKS, SPEECH } from './config.js';
+import { NIKICH, ATTACKS, SPEECH, ITEMS } from './config.js';
 
 export function createNikich(x, y, N = NIKICH) {
   return {
@@ -17,6 +17,8 @@ export function createNikich(x, y, N = NIKICH) {
     aim: { x: 1, y: 0 }, // единичный вектор на курсор
     cooldowns: { shot: 0, dog: 0, stun: 0 },
     superMeter: 0,
+    // Временные эффекты Предметов, с до конца (SPEC §7)
+    effects: { vodka: 0, beer: 0, scooter: 0 },
     // Множители от Улучшений и Бонусов (этапы 4 и 6)
     mods: {
       damageMul: 1,
@@ -24,6 +26,7 @@ export function createNikich(x, y, N = NIKICH) {
       superChargeMul: 1,
       dogHoldBonus: 0,
       stunRadiusMul: 1,
+      beerDamageMul: 1, // «Железная печень» даст 0,5
     },
   };
 }
@@ -46,14 +49,88 @@ export function setAim(n, worldX, worldY, N = NIKICH) {
   if (Math.abs(dx) > 0.5) n.facing = Math.sign(dx);
 }
 
-export function updateNikich(n, intent, dt, map, P) {
+// Урон всех атак с учётом Стопарика
+export function damageMul(n, I = ITEMS) {
+  return n.mods.damageMul * (n.effects.vodka > 0 ? I.vodka.damageMul : 1);
+}
+
+export function isRiding(n) {
+  return n.effects.scooter > 0;
+}
+
+// Скорость и прыжок от Самоката и Пива 0,0
+export function movementMods(n, I = ITEMS) {
+  let speedMul = 1;
+  let jumpHeight = 1;
+  if (isRiding(n)) {
+    speedMul *= I.scooter.speedMul;
+    jumpHeight *= I.scooter.jumpHeightMul;
+  }
+  if (n.effects.beer > 0) {
+    speedMul *= I.beerZero.speedMul;
+    jumpHeight *= I.beerZero.jumpHeightMul;
+  }
+  return { speedMul, jumpMul: Math.sqrt(jumpHeight), passBarriers: isRiding(n) };
+}
+
+// Падение с Самоката: лицом в асфальт
+function crash(n, I) {
+  n.effects.scooter = 0;
+  stunNikich(n, I.scooter.crashStun);
+}
+
+// События физики + scooterEnded (Самокат кончился, Никич упал)
+export function updateNikich(n, intent, dt, map, P, I = ITEMS) {
   for (const k of Object.keys(n.cooldowns)) n.cooldowns[k] = Math.max(0, n.cooldowns[k] - dt);
   n.invuln = Math.max(0, n.invuln - dt);
   n.hurtLock = Math.max(0, n.hurtLock - dt);
   n.stun = Math.max(0, n.stun - dt);
+  n.effects.vodka = Math.max(0, n.effects.vodka - dt);
+  n.effects.beer = Math.max(0, n.effects.beer - dt);
+  const wasRiding = isRiding(n);
   const locked = n.hurtLock > 0 || n.stun > 0;
   const effective = locked ? { ...intent, move: 0, jumpPressed: false } : intent;
-  return stepPlatformer(n.body, effective, dt, map, P);
+  const speedBefore = Math.abs(n.body.vx);
+  const ev = stepPlatformer(n.body, effective, dt, map, P, movementMods(n, I));
+  ev.scooterEnded = false;
+  if (wasRiding) {
+    n.effects.scooter = Math.max(0, n.effects.scooter - dt);
+    if (ev.hitWall && speedBefore >= I.scooter.crashMinSpeed) {
+      n.body.vx = 0;
+      crash(n, I);
+      ev.scooterEnded = true;
+    } else if (n.effects.scooter <= 0) {
+      crash(n, I);
+      ev.scooterEnded = true;
+    }
+  }
+  return ev;
+}
+
+// Сесть на Самокат (наездом)
+export function mountScooter(n, I = ITEMS) {
+  if (isRiding(n)) return false;
+  n.effects.scooter = I.scooter.duration;
+  return true;
+}
+
+// На Самокате сбивает Зожников: урон, отбрасывание, короткое оглушение
+export function ramZozniki(n, zozniki, I = ITEMS) {
+  const hits = [];
+  if (!isRiding(n)) return hits;
+  const S = I.scooter;
+  for (const z of zozniki) {
+    if (!z.alive || (z.ramCd ?? 0) > 0 || !overlaps(n.body, z.body)) continue;
+    z.ramCd = S.ramCooldown;
+    const dir = Math.sign(z.body.x + z.body.w / 2 - (n.body.x + n.body.w / 2)) || n.facing;
+    z.body.vx = dir * S.ramKnockX;
+    z.body.vy = -S.ramKnockY;
+    z.body.onGround = false;
+    stunZoznik(z, S.ramCooldown);
+    const res = applyDamage(n, z, S.ramDamage * damageMul(n, I));
+    hits.push({ z, ...res });
+  }
+  return hits;
 }
 
 export function stunNikich(n, duration) {
@@ -95,7 +172,7 @@ export function tryShoot(n, A = ATTACKS, N = NIKICH) {
     vy: n.aim.y * S.speed,
     travelled: 0,
     range: S.range,
-    damage: S.damage * n.mods.damageMul,
+    damage: S.damage * damageMul(n),
     alive: true,
   };
 }
@@ -141,7 +218,7 @@ export function tryDog(n, aimWorldX, A = ATTACKS, N = NIKICH) {
     target: null,
     holdLeft: 0,
     wantJump: false,
-    dps: D.dps * n.mods.damageMul,
+    dps: D.dps * damageMul(n),
     holdTime: D.holdTime + n.mods.dogHoldBonus,
     alive: true,
   };
@@ -201,7 +278,7 @@ export function tryStun(n, zozniki, A = ATTACKS) {
   for (const z of zozniki) {
     if (z.alive && distToBox(c.x, c.y, z.body) <= radius) {
       stunZoznik(z, S.duration);
-      hits.push({ z, ...applyDamage(n, z, S.damage * n.mods.damageMul) });
+      hits.push({ z, ...applyDamage(n, z, S.damage * damageMul(n)) });
     }
   }
   return { x: c.x, y: c.y, radius, hits };
@@ -220,7 +297,7 @@ export function trySuper(n, zozniki, view, A = ATTACKS) {
   const hits = [];
   for (const z of zozniki) {
     if (z.alive && overlaps(z.body, view)) {
-      hits.push({ z, ...applyDamage(n, z, A.super.damage * n.mods.damageMul, { charge: false }) });
+      hits.push({ z, ...applyDamage(n, z, A.super.damage * damageMul(n), { charge: false }) });
     }
   }
   return { hits };
@@ -238,12 +315,30 @@ export function takeDamage(n, amount, fromX, N = NIKICH) {
   n.body.vx = dir * N.knockbackX;
   n.body.vy = -N.knockbackY;
   n.body.onGround = false;
-  if (n.health <= 0) {
-    n.lives -= 1;
-    n.health = n.maxHealth;
-    return { hit: true, lifeLost: true, gameOver: n.lives <= 0 };
-  }
-  return { hit: true, lifeLost: false, gameOver: false };
+  return { hit: true, ...loseHealth(n, amount, { already: true }) };
+}
+
+// Снять здоровье без отбрасывания (Пиво 0,0). Кончилось — минус жизнь.
+export function loseHealth(n, amount, { already = false } = {}) {
+  if (!already) n.health -= amount;
+  if (n.health <= 1e-9) return { lifeLost: true, ...loseLife(n) };
+  return { lifeLost: false, gameOver: false };
+}
+
+// Минус жизнь (здоровье кончилось или Яма): здоровье полное, эффекты сброшены
+export function loseLife(n) {
+  n.lives -= 1;
+  n.health = n.maxHealth;
+  n.effects = { vodka: 0, beer: 0, scooter: 0 };
+  n.stun = 0;
+  n.hurtLock = 0;
+  return { gameOver: n.lives <= 0 };
+}
+
+export function heal(n, amount) {
+  const before = n.health;
+  n.health = Math.min(n.maxHealth, n.health + amount);
+  return n.health - before;
 }
 
 // ---------- Реплики над головой (SPEC §12) ----------

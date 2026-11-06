@@ -142,6 +142,37 @@ export const ZOZNIKI = Object.freeze({
 
 export const DROPS = Object.freeze({
   beerZeroChance: 0.1, // SPEC §6: с убитого Зожника выпадает Пиво 0,0
+  bonusChance: 0.05, // SPEC §7: «иногда» выпадает Бонус
+  bonusKinds: Object.freeze(['hotdog', 'cigarette', 'chip', 'vodka']),
+  popVelocity: 140, // px/с вверх — предмет подскакивает из Зожника
+});
+
+// Предметы (SPEC §7). jumpHeightMul — множитель высоты прыжка (скорость отрыва — корень из него).
+export const ITEMS = Object.freeze({
+  size: 12, // px, квадрат подбора
+  bobAmp: 2, // px, висящие предметы покачиваются
+  bobSpeed: 3, // рад/с
+  hotdog: Object.freeze({ heal: 30 }),
+  vodka: Object.freeze({ damageMul: 1.25, duration: 8, swayAmp: 2, swaySpeed: 2 }),
+  cigarette: Object.freeze({ time: 15 }),
+  chip: Object.freeze({ score: 100 }),
+  beerZero: Object.freeze({ damage: 15, duration: 4, speedMul: 0.6, jumpHeightMul: 0.6 }),
+  scooter: Object.freeze({
+    duration: 10,
+    speedMul: 2,
+    jumpHeightMul: 1.5,
+    ramDamage: 30,
+    ramCooldown: 0.5, // с, один Зожник не сбивается чаще
+    ramKnockX: 220,
+    ramKnockY: 160,
+    crashMinSpeed: 120, // px/с — удар о стену быстрее этого сбрасывает с Самоката
+    crashStun: 1, // с лицом в асфальт
+  }),
+});
+
+export const LEVEL = Object.freeze({
+  time: 180, // с, таймер Уровня (SPEC §9)
+  lowTime: 30, // с — таймер краснеет
 });
 
 export const SPAWN = Object.freeze({

@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { TILE, createBody } from '../src/physics.js';
-import { parseMap, createMap, createCamera, updateCamera, snapCamera } from '../src/world.js';
+import {
+  parseMap, createMap, createCamera, updateCamera, snapCamera,
+  createTimer, updateTimer, formatTime, createCheckpoints, updateCheckpoints, reachedExit,
+} from '../src/world.js';
 import { CAMERA, SCREEN, TILE_SIZE, LOOP, MAP_HEIGHT_TILES } from '../src/config.js';
 import { buildTestMap } from '../src/levels/test.js';
 
@@ -107,4 +110,69 @@ test('тестовая карта: высота 17 тайлов, есть пол
     if (map.get(tx, ty) === TILE.SOLID) { floor = ty; break; }
   }
   assert.ok(floor > 0, 'под точкой появления есть пол');
+});
+
+// ---------- Таймер Уровня ----------
+
+test('таймер: 180 с истекают ровно один раз', () => {
+  const t = createTimer(180);
+  let fired = 0;
+  for (let i = 0; i < 180 * 60 - 1; i++) if (updateTimer(t, LOOP.step)) fired++;
+  assert.equal(fired, 0);
+  assert.equal(t.expired, false);
+  for (let i = 0; i < 5; i++) if (updateTimer(t, LOOP.step)) fired++;
+  assert.equal(fired, 1);
+  assert.equal(t.left, 0);
+  assert.equal(updateTimer(t, 1), false, 'дальше не срабатывает');
+});
+
+test('таймер: добавка времени отодвигает конец', () => {
+  const t = createTimer(1);
+  updateTimer(t, 0.5);
+  t.left += 15;
+  for (let i = 0; i < 15 * 60; i++) updateTimer(t, LOOP.step);
+  assert.equal(t.expired, false);
+  for (let i = 0; i < 60; i++) updateTimer(t, LOOP.step);
+  assert.equal(t.expired, true);
+});
+
+test('таймер: формат мм:сс с округлением вверх', () => {
+  assert.equal(formatTime(180), '3:00');
+  assert.equal(formatTime(179.2), '3:00');
+  assert.equal(formatTime(59.01), '1:00');
+  assert.equal(formatTime(9), '0:09');
+  assert.equal(formatTime(0.2), '0:01');
+  assert.equal(formatTime(0), '0:00');
+});
+
+// ---------- Контрольные точки и выход ----------
+
+test('контрольные точки: возврат на последнюю пройденную', () => {
+  const map = createMap(100, 10, TS);
+  map.spawn = { x: 2 * TS, y: 8 * TS };
+  map.checkpoints = [{ tx: 60, ty: 6 }, { tx: 30, ty: 8 }];
+  const cp = createCheckpoints(map);
+  assert.deepEqual(cp.current, { x: 2 * TS, y: 8 * TS }, 'сначала — старт');
+  const b = createBody(20 * TS, 0, 10, 22);
+  assert.equal(updateCheckpoints(cp, b), null);
+  b.x = 31 * TS;
+  assert.equal(updateCheckpoints(cp, b).tx, 30);
+  assert.deepEqual(cp.current, { x: 30 * TS, y: 8 * TS });
+  b.x = 10 * TS; // вернулся назад — точка не теряется
+  updateCheckpoints(cp, b);
+  assert.deepEqual(cp.current, { x: 30 * TS, y: 8 * TS });
+  b.x = 61 * TS;
+  updateCheckpoints(cp, b);
+  assert.deepEqual(cp.current, { x: 60 * TS, y: 6 * TS });
+});
+
+test('выход: Уровень пройден у столбца выхода', () => {
+  const map = createMap(100, 10, TS);
+  const b = createBody(0, 0, 10, 22);
+  assert.equal(reachedExit(map, b), false, 'без выхода — никогда');
+  map.exit = { tx: 90 };
+  b.x = 89 * TS;
+  assert.equal(reachedExit(map, b), false);
+  b.x = 90 * TS;
+  assert.equal(reachedExit(map, b), true);
 });

@@ -35,6 +35,7 @@ export function createZoznik(kind, x, y, K = ZOZNIKI) {
     dashLeft: 0,
     lectureCd: 0,
     throwCd: (k.throwCooldown ?? 0) / 2,
+    ramCd: 0, // с, пока Самокат не может сбить снова
   };
 }
 
@@ -332,6 +333,7 @@ export function updateZoznik(z, dt, map, P, target = null, K = ZOZNIKI, rng = Ma
   z.held = Math.max(0, z.held - dt);
   z.lectureCd = Math.max(0, z.lectureCd - dt);
   z.throwCd = Math.max(0, z.throwCd - dt);
+  z.ramCd = Math.max(0, z.ramCd - dt);
 
   let it = IDLE;
   if (canAct(z) && target) {

@@ -81,10 +81,19 @@ function bar(ctx, x, y, w, h, frac, color, back = '#2a2a3a') {
   ctx.fillRect(x, y, Math.round(w * Math.max(0, Math.min(1, frac))), h);
 }
 
-// Временный HUD (полный — этап 4): здоровье, жизни, шкала супера, перезарядки атак
-export function drawHud(ctx, n, A, time) {
+// HUD: здоровье, жизни, шкала супера, эффекты Предметов, таймер, очки, перезарядки атак.
+// run: { timeText, lowTime, score }; effects: [{ label, left }]
+export function drawHud(ctx, n, A, time, run = null, effects = []) {
   bar(ctx, 6, 6, 70, 6, n.health / n.maxHealth, '#e63946');
   drawText(ctx, `${UI.lives} ${n.lives}`, 82, 4);
+  effects.forEach((e, i) => {
+    drawText(ctx, `${e.label} ${Math.ceil(e.left)}`, 6, 24 + i * 9, { size: 7, color: e.color ?? COLORS.text });
+  });
+  if (run) {
+    const blinkLow = run.lowTime && Math.floor(time * 2) % 2 === 0;
+    drawText(ctx, run.timeText, W / 2 - 40, 3, { size: 12, align: 'center', bold: true, color: blinkLow ? '#e63946' : COLORS.text });
+    drawText(ctx, `${UI.score} ${run.score}`, W / 2 - 40, 17, { size: 7, align: 'center', color: COLORS.accent });
+  }
   const full = n.superMeter >= A.super.meterMax;
   const blink = full && Math.floor(time * 4) % 2 === 0;
   bar(ctx, 6, 16, 70, 4, n.superMeter / A.super.meterMax, blink ? '#ffffff' : COLORS.accent);
@@ -112,6 +121,25 @@ export function drawHud(ctx, n, A, time) {
 }
 
 // Реплика над головой (SPEC §5, §12)
+// Проигрыш (SPEC §4): «Я гнию изнутри» + фраза из пула, «Ещё раз». Фото «на полу» — этап 8.
+export function drawLose(ctx, reason, line, ready, time) {
+  ctx.fillStyle = 'rgba(20, 8, 12, 0.85)';
+  ctx.fillRect(0, 0, W, H);
+  drawText(ctx, UI.loseTitle, W / 2, H / 2 - 44, { size: 16, color: '#e63946', align: 'center', bold: true });
+  drawText(ctx, reason, W / 2, H / 2 - 20, { color: COLORS.muted, align: 'center' });
+  drawText(ctx, `«${line}»`, W / 2, H / 2 - 4, { align: 'center' });
+  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.retry, W / 2, H / 2 + 26, { color: COLORS.accent, align: 'center' });
+}
+
+// Уровень пройден: статистика; переход дальше — этап 5
+export function drawLevelDone(ctx, lines, ready, time) {
+  ctx.fillStyle = 'rgba(11, 20, 16, 0.85)';
+  ctx.fillRect(0, 0, W, H);
+  drawText(ctx, UI.levelDone, W / 2, H / 2 - 50, { size: 16, color: COLORS.accent, align: 'center', bold: true });
+  lines.forEach((l, i) => drawText(ctx, l, W / 2, H / 2 - 22 + i * 11, { align: 'center' }));
+  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.retry, W / 2, H / 2 + 40, { color: COLORS.muted, align: 'center' });
+}
+
 export function drawBubble(ctx, text, x, y) {
   ctx.font = 'bold 8px monospace';
   const w = Math.ceil(ctx.measureText(text).width) + 6;

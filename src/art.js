@@ -20,9 +20,11 @@ export function drawNikich(c, n, camX, camY, time, squash = 0) {
   const feetY = Math.round(b.y + b.h - camY);
   const x = feetX - Math.floor(w / 2);
   const y = feetY - h;
-  const moving = b.onGround && Math.abs(b.vx) > 20;
+  const moving = b.onGround && Math.abs(b.vx) > 20 && !(n.effects.scooter > 0);
   const bob = moving ? Math.floor(time * 10) % 2 : 0;
   const f = n.facing;
+  const riding = n.effects.scooter > 0;
+  if (riding) drawScooterUnder(c, feetX, feetY, f, time);
 
   const step = moving ? Math.floor(time * 10) % 2 : 0;
   rect(c, x + 4 + step * 2, y + h - 5, 3, 5, '#e9c8a0'); // ноги
@@ -198,4 +200,71 @@ export function drawRamp(c, tx, ty, ts, camX, camY) {
     const h = Math.ceil(((ts - i) / ts) * 8);
     rect(c, x0 + i, y0 - h, 1, h, i % 4 === 0 ? '#e9c46a' : '#f4a261');
   }
+}
+
+// ---------- Предметы (SPEC §7) ----------
+
+function drawScooterUnder(c, feetX, feetY, f, time) {
+  rect(c, feetX - 9, feetY - 2, 18, 2, '#e63946'); // дека
+  rect(c, feetX - 9, feetY - 1, 3, 3, '#1b1b1b'); // колёса
+  rect(c, feetX + 6, feetY - 1, 3, 3, '#1b1b1b');
+  const hx = f > 0 ? feetX + 7 : feetX - 8;
+  rect(c, hx, feetY - 16, 1, 14, '#adb5bd'); // стойка
+  rect(c, hx - 2, feetY - 16, 5, 1, '#adb5bd'); // руль
+}
+
+const ITEM_DRAW = {
+  // Хот-дог из Żabki
+  hotdog(c, x, y) {
+    rect(c, x - 6, y - 1, 12, 4, '#e9c46a');
+    rect(c, x - 5, y - 2, 10, 2, '#b5452b');
+    rect(c, x - 4, y - 2, 8, 1, '#f4d35e');
+  },
+  // Стопарик водки
+  vodka(c, x, y) {
+    rect(c, x - 3, y - 4, 6, 8, '#caf0f8');
+    rect(c, x - 2, y - 1, 4, 4, '#ffffff');
+    rect(c, x - 3, y + 4, 6, 1, '#90e0ef');
+  },
+  // Сигарета с дымком
+  cigarette(c, x, y, t) {
+    rect(c, x - 5, y, 8, 2, '#f4f1de');
+    rect(c, x + 3, y, 3, 2, '#e76f51');
+    rect(c, x + 5, y - 2 - (Math.floor(t * 4) % 2), 1, 1, '#adb5bd');
+  },
+  // Покерная фишка
+  chip(c, x, y) {
+    rect(c, x - 4, y - 4, 8, 8, '#d00000');
+    rect(c, x - 2, y - 2, 4, 4, '#ffffff');
+    rect(c, x - 4, y - 1, 1, 2, '#ffffff');
+    rect(c, x + 3, y - 1, 1, 2, '#ffffff');
+  },
+  // Пиво 0,0 — банка-обманка
+  beerZero(c, x, y) {
+    rect(c, x - 3, y - 5, 6, 10, '#2a9d8f');
+    rect(c, x - 3, y - 2, 6, 3, '#f4f1de');
+    rect(c, x - 1, y - 1, 2, 1, '#2a9d8f'); // «0,0»
+    rect(c, x - 2, y - 6, 4, 1, '#adb5bd');
+  },
+  // Самокат
+  scooter(c, x, y) {
+    rect(c, x - 7, y + 3, 14, 2, '#e63946');
+    rect(c, x - 7, y + 4, 3, 3, '#1b1b1b');
+    rect(c, x + 4, y + 4, 3, 3, '#1b1b1b');
+    rect(c, x + 5, y - 7, 1, 10, '#adb5bd');
+    rect(c, x + 3, y - 7, 5, 1, '#adb5bd');
+  },
+};
+
+export function drawItem(c, it, camX, camY, I) {
+  const bob = it.body ? 0 : Math.sin(it.t * I.bobSpeed) * I.bobAmp;
+  ITEM_DRAW[it.type](c, Math.round(it.x - camX), Math.round(it.y - camY + bob), it.t);
+}
+
+// Контрольная точка — флажок: серый, пока не пройдена, жёлтый после
+export function drawCheckpoint(c, x, feetY, reached, camX, camY) {
+  const px = Math.round(x - camX);
+  const py = Math.round(feetY - camY);
+  rect(c, px, py - 22, 1, 22, '#adb5bd');
+  rect(c, px + 1, py - 22, 8, 5, reached ? '#f4d35e' : '#6c757d');
 }
