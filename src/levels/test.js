@@ -60,5 +60,20 @@ export function buildTestMap(tileSize) {
   m.fill(134, 11, 136, 14, DECOR);
 
   m.spawn = { x: 3 * tileSize, y: (GROUND - 1) * tileSize };
+
+  // Манекены для проверки атак: тайл, на котором стоят ноги (ряд над полом/платформой)
+  m.dummies = [
+    { tx: 8, ty: GROUND - 1 },
+    { tx: 19, ty: GROUND - 1 }, // кучка под платформой — для 5:0 и супера
+    { tx: 20, ty: GROUND - 1 },
+    { tx: 21, ty: GROUND - 1 },
+    { tx: 26, ty: 6 }, // на высокой тонкой платформе — для прицела вверх
+    { tx: 41, ty: GROUND - 1 },
+    { tx: 48, ty: GROUND - 1 }, // в тоннеле
+    { tx: 66, ty: GROUND - 1 },
+    { tx: 72, ty: 7 },
+    { tx: 93, ty: 10 }, // на плато
+    { tx: 108, ty: GROUND - 1 },
+  ];
   return m;
 }

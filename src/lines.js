@@ -5,10 +5,22 @@ export const UI = Object.freeze({
   start: 'Клик или Пробел — начать',
   paused: 'Пауза',
   resume: 'Esc — продолжить',
-  testMap: 'Этап 1 · тестовая карта',
-  controlsHint: 'A/D — бег · W/Пробел — прыжок (зажать — выше) · S — вниз · Esc — пауза · F3 — отладка',
+  testMap: 'Тестовая карта · манекены',
+  controlsHint: 'A/D бег · W прыжок · S вниз · ЛКМ Щелбан · ПКМ Собака · E 5:0 · R Папа · Esc пауза',
+  lives: 'Жизни',
+  abilityShot: 'Щелбан',
+  abilityDog: 'Собака',
+  abilityStun: '5:0',
+  abilitySuper: 'Папа',
+  keyShot: 'ЛКМ',
+  keyDog: 'ПКМ',
+  keyStun: 'E',
+  keySuper: 'R',
 });
 
 export const LINES = Object.freeze({
   pit: ['ПАМАГИТЕ'],
+  stun: ['5:0!'],
+  super: ['Папа сейчас всё сделает'],
+  kill: ['Легендарная игра', 'Дал бы под хвост'],
 });

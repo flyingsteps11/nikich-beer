@@ -72,6 +72,45 @@ export function drawCrosshair(ctx, x, y) {
   ctx.fillRect(cx, cy + 2, 1, 3);
 }
 
+function bar(ctx, x, y, w, h, frac, color, back = '#2a2a3a') {
+  ctx.fillStyle = COLORS.shadow;
+  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  ctx.fillStyle = back;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, Math.round(w * Math.max(0, Math.min(1, frac))), h);
+}
+
+// Временный HUD (полный — этап 4): здоровье, жизни, шкала супера, перезарядки атак
+export function drawHud(ctx, n, A, time) {
+  bar(ctx, 6, 6, 70, 6, n.health / n.maxHealth, '#e63946');
+  drawText(ctx, `${UI.lives} ${n.lives}`, 82, 4);
+  const full = n.superMeter >= A.super.meterMax;
+  const blink = full && Math.floor(time * 4) % 2 === 0;
+  bar(ctx, 6, 16, 70, 4, n.superMeter / A.super.meterMax, blink ? '#ffffff' : COLORS.accent);
+
+  const slots = [
+    [UI.keyShot, UI.abilityShot, n.cooldowns.shot, A.shot.cooldown],
+    [UI.keyDog, UI.abilityDog, n.cooldowns.dog, A.dog.cooldown],
+    [UI.keyStun, UI.abilityStun, n.cooldowns.stun, A.stun.cooldown],
+    [UI.keySuper, UI.abilitySuper, full ? 0 : 1, 1],
+  ];
+  const w = 46;
+  let x = W - slots.length * (w + 3) - 3;
+  for (const [key, name, cd, max] of slots) {
+    const ready = cd <= 0;
+    ctx.fillStyle = ready ? '#3d5a40' : '#3a2a2a';
+    ctx.fillRect(x, 4, w, 18);
+    if (!ready) {
+      ctx.fillStyle = '#5a3a3a';
+      ctx.fillRect(x, 4, Math.round(w * (1 - cd / max)), 18);
+    }
+    drawText(ctx, key, x + 2, 5, { size: 7, color: COLORS.muted, shadow: false });
+    drawText(ctx, name, x + 2, 13, { size: 7, color: ready ? COLORS.text : COLORS.muted, shadow: false });
+    x += w + 3;
+  }
+}
+
 // Реплика над головой (SPEC §5, §12)
 export function drawBubble(ctx, text, x, y) {
   ctx.font = 'bold 8px monospace';

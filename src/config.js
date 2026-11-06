@@ -44,6 +44,65 @@ export const PHYSICS = Object.freeze({
 export const NIKICH = Object.freeze({
   hitboxW: 10, // спрайт 16×24, хитбокс уже, чтобы не цепляться за края
   hitboxH: 22,
+  handOffsetY: 9, // px от макушки — откуда летят окурки
+  maxHealth: 100, // SPEC §5
+  lives: 3,
+  invulnTime: 1, // с неуязвимости после удара
+  hurtLockTime: 0.25, // с без управления после удара (отбрасывание)
+  knockbackX: 130, // px/с
+  knockbackY: 170, // px/с вверх
+});
+
+// Атаки Никича (SPEC §5.1)
+export const ATTACKS = Object.freeze({
+  shot: Object.freeze({ // Щелбан
+    damage: 10,
+    speed: 300,
+    range: 220,
+    cooldown: 0.25,
+  }),
+  dog: Object.freeze({ // Собака
+    cooldown: 6,
+    dps: 15,
+    holdTime: 3, // с, сколько держит Зожника
+    speed: 200, // px/с бега по земле
+    jumpVelocity: 230, // px/с — подпрыгивает, упёршись в препятствие
+    maxRunTime: 2.5, // с, не нашла Зожника — убегает
+    w: 12,
+    h: 8,
+  }),
+  stun: Object.freeze({ // 5:0
+    cooldown: 5,
+    radius: 70,
+    duration: 1.5,
+    damage: 5,
+  }),
+  super: Object.freeze({ // Папа сейчас всё сделает
+    damage: 200,
+    meterMax: 100,
+    meterPerDamage: 1, // +1 к шкале за каждую единицу урона
+    shakeTime: 0.4,
+    shakeAmp: 4, // px
+    flashTime: 0.25,
+  }),
+});
+
+// Зожники (SPEC §6). На этапе 2 — только манекен для проверки атак.
+export const ZOZNIKI = Object.freeze({
+  dummy: Object.freeze({ health: 100, w: 12, h: 22, respawnTime: 2 }),
+});
+
+export const HIT_FLASH_TIME = 0.1; // с, Зожник мигает от попадания
+
+export const SPEECH = Object.freeze({
+  minInterval: 3, // с между репликами над головой (SPEC §12)
+  holdTime: 2, // с, сколько реплика висит
+});
+
+export const EFFECTS = Object.freeze({
+  floaterTime: 0.6, // с, всплывающая цифра урона
+  floaterRise: 20, // px вверх за время жизни
+  stunRingTime: 0.25, // с, кольцо 5:0
 });
 
 export const CAMERA = Object.freeze({
