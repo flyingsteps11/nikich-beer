@@ -79,7 +79,27 @@ export function nikichFrame(n, time) {
   return 'stand';
 }
 
-export function drawNikich(c, n, camX, camY, time, squash = 0) {
+const NIKICH_HEAD_ROWS = 11;
+const NECK_OVERLAP = 2;
+
+function drawHeadImage(c, head, cx, bottom, flip, opts = {}) {
+  const w = head.w;
+  const h = head.h;
+  c.save();
+  c.translate(cx, bottom);
+  if (flip) c.scale(-1, 1);
+  if (opts.alpha !== undefined) c.globalAlpha = opts.alpha;
+  c.drawImage(head.img, -w / 2, -h, w, h);
+  if (opts.tint) {
+    c.globalCompositeOperation = 'source-atop';
+    c.globalAlpha = 0.6;
+    c.fillStyle = opts.tint;
+    c.fillRect(-w / 2, -h, w, h);
+  }
+  c.restore();
+}
+
+export function drawNikich(c, n, camX, camY, time, squash = 0, head = null) {
   const b = n.body;
   if (n.invuln > 0 && Math.floor(time * 20) % 2 === 0) return;
   const feetX = Math.round(b.x + b.w / 2 - camX);
@@ -87,16 +107,21 @@ export function drawNikich(c, n, camX, camY, time, squash = 0) {
   const f = n.facing;
   const riding = n.effects.scooter > 0;
   if (riding) drawScooterUnder(c, feetX, feetY, f, time);
-  const rows = [...NIKICH_TOP, ...NIKICH_LEGS[nikichFrame(n, time)]];
+  const photoHead = head && head.img;
+  const top = photoHead ? NIKICH_TOP.slice(NIKICH_HEAD_ROWS) : NIKICH_TOP;
+  const rows = [...top, ...NIKICH_LEGS[nikichFrame(n, time)]];
   const bob = nikichFrame(n, time) === 'run' ? 1 : 0;
+  const tint = n.hurtLock > 0 ? '#ff6b6b' : undefined;
   c.save();
   c.translate(feetX, feetY);
   c.scale(1 + squash * 2, 1 - squash * 2);
-  drawPixels(c, rows, NIKICH_PAL, -8, -24 - bob, f < 0, 1, { tint: n.hurtLock > 0 ? '#ff6b6b' : undefined });
+  drawPixels(c, rows, NIKICH_PAL, -8, -rows.length - bob, f < 0, 1, { tint });
+  if (photoHead) drawHeadImage(c, head, f, -rows.length - bob + NECK_OVERLAP, f < 0, { tint });
   c.restore();
-  const hy = feetY - b.h + 9;
+  const hy = feetY - b.h + (photoHead ? 12 : 9);
   rect(c, feetX + n.aim.x * 8 - 1, hy + n.aim.y * 8 - 1, 2, 2, NIKICH_PAL.S);
-  if (n.stun > 0) stars(c, feetX, feetY - 28, time, '#c77dff');
+  const headTop = photoHead ? rows.length + head.h - NECK_OVERLAP : 24;
+  if (n.stun > 0) stars(c, feetX, feetY - headTop - 4, time, '#c77dff');
 }
 
 // ---------- Зожники ----------
@@ -419,21 +444,33 @@ function drawShaker(c, x, y, s) {
   rect(c, x, y - s, 3 * s, s, '#212529');
 }
 
+const GMAN_HEAD_ROWS = 8;
+
 export function drawGmanFigure(c, feetX, feetY, facing, scale, opts = {}) {
+  const photoHead = opts.head && opts.head.img;
+  const rows = photoHead ? GMAN_ROWS.slice(GMAN_HEAD_ROWS) : GMAN_ROWS;
+  const skipped = GMAN_ROWS.length - rows.length;
   const w = 16 * scale;
-  const h = 24 * scale;
   const left = Math.round(feetX - w / 2);
-  const top = Math.round(feetY - h);
+  const top = Math.round(feetY - 24 * scale);
+  const bodyTop = top + skipped * scale;
   const flip = facing < 0;
   const handX = flip ? left : left + w - 2 * scale;
   const handY = top + 14 * scale;
   if (opts.briefcase && !opts.shaker) drawBriefcase(c, flip ? handX - 4 * scale : handX - scale, handY + scale, scale);
-  drawPixels(c, GMAN_ROWS, GMAN_PAL, left, top, flip, scale, opts);
-  if (opts.shaker) drawShaker(c, flip ? left + 3 * scale : left + w - 6 * scale, top + 4 * scale, scale);
+  drawPixels(c, rows, GMAN_PAL, left, bodyTop, flip, scale, opts);
+  if (photoHead) {
+    const fade = opts.dissolve ? Math.max(0, 1 - opts.dissolve) : 1;
+    const head = { img: opts.head.img, w: opts.head.w * scale, h: opts.head.h * scale };
+    const rise = opts.dissolve ? opts.dissolve * 6 : 0;
+    drawHeadImage(c, head, feetX, bodyTop + NECK_OVERLAP * scale - rise, flip, { alpha: fade, tint: opts.tint });
+  }
+  const mouthY = photoHead ? bodyTop - 6 * scale : top + 4 * scale;
+  if (opts.shaker) drawShaker(c, flip ? left + 1 * scale : left + w - 4 * scale, mouthY, scale);
   if (opts.tie) rect(c, left + 7 * scale, top + 9 * scale, 2 * scale, 2 * scale, GMAN_PAL.S);
 }
 
-export function drawGman(c, g, camX, camY, time, colors, dissolveTime) {
+export function drawGman(c, g, camX, camY, time, colors, dissolveTime, head = null) {
   if (g.state === 'gone') return;
   const b = g.body;
   if (g.act === 'vanish' && Math.floor(time * 24) % 2 === 0) return;
@@ -446,6 +483,7 @@ export function drawGman(c, g, camX, camY, time, colors, dissolveTime) {
     tie: g.state === 'tie' && Math.floor(time * 6) % 2 === 0,
     dissolve,
     tint: g.flash > 0 ? WHITE : undefined,
+    head,
   });
   if (g.windup > 0) {
     c.strokeStyle = colors.accent;
@@ -454,7 +492,7 @@ export function drawGman(c, g, camX, camY, time, colors, dissolveTime) {
     c.arc(feetX, feetY - 12, 14 + Math.sin(time * 30) * 2, 0, Math.PI * 2);
     c.stroke();
   }
-  if (g.stun > 0) stars(c, feetX, feetY - 27, time, colors.accent);
+  if (g.stun > 0) stars(c, feetX, feetY - (head && head.img ? 36 : 27), time, colors.accent);
 }
 
 export function drawEnemyShot(c, s, camX, camY, time) {
@@ -486,5 +524,19 @@ export function drawBarDoor(c, x, feetY, w, open, camX, camY) {
   } else {
     rect(c, left + w / 2 - 1, top, 2, 40, '#1b100a');
     rect(c, left + w / 2 + 3, top + 20, 2, 3, '#f4d35e');
+  }
+}
+
+export function drawLockGate(c, x, feetY, h, state, camX, camY, time) {
+  const px = Math.round(x - camX);
+  const py = Math.round(feetY - camY);
+  rect(c, px - 2, py - h, 4, h, '#6c757d');
+  rect(c, px - 3, py - h - 2, 6, 2, '#495057');
+  if (state === 'active') {
+    for (let y = 0; y < h - 4; y += 6) rect(c, px - 1, py - h + 2 + y, 2, 3, Math.floor(y / 6) % 2 ? '#ecf0f1' : '#e63946');
+    for (let i = 0; i < 3; i++) rect(c, px - 8, py - h + 8 + i * 14, 16, 3, i % 2 ? '#ecf0f1' : '#e63946');
+    if (Math.floor(time * 4) % 2 === 0) rect(c, px - 2, py - h - 5, 4, 3, '#ff4d4d');
+  } else if (state === 'idle') {
+    rect(c, px - 8, py - 2, 16, 2, '#e63946');
   }
 }

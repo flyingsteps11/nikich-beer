@@ -3,9 +3,21 @@
   "configurations": [
     {
       "name": "game",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8000"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.mjs",
+        "8000"
+      ],
       "port": 8000
+    },
+    {
+      "name": "game-voice",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.mjs",
+        "8010"
+      ],
+      "port": 8010
     }
   ]
 }

@@ -7,8 +7,10 @@
 ES-модули не работают с `file://`, нужен локальный сервер:
 
 ```bash
-python -m http.server 8000
+node tools/serve.mjs
 ```
+
+или `python -m http.server 8000`.
 
 Открыть http://localhost:8000.
 

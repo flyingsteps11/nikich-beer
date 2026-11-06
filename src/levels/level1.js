@@ -104,5 +104,10 @@ export function build(ts) {
     { type: 'edge', atTx: 118, kinds: ['runner', 'runner', 'runner'], interval: 0.9 },
     { type: 'edge', atTx: 135, kinds: ['runner', 'runner'], interval: 0.8 },
   ];
+  m.locks = [
+    { tx0: 30, tx1: 52, waves: [['runner', 'runner'], ['runner', 'runner', 'runner']] },
+    { tx0: 80, tx1: 104, waves: [['runner', 'runner', 'runner'], ['runner', 'runner', 'runner', 'runner']] },
+    { tx0: 122, tx1: 146, waves: [['runner', 'runner', 'runner'], ['runner', 'runner', 'runner'], ['runner', 'runner', 'runner', 'runner']] },
+  ];
   return m;
 }

@@ -111,5 +111,10 @@ export function build(ts) {
     { type: 'point', tx: 160, ty: G - 6, kind: 'yoga' },
     { type: 'edge', atTx: 160, kinds: ['smoothie', 'runner', 'runner', 'smoothie'], interval: 0.7 },
   ];
+  m.locks = [
+    { tx0: 8, tx1: 31, waves: [['runner', 'yoga', 'runner'], ['smoothie', 'runner', 'runner']] },
+    { tx0: 107, tx1: 125, waves: [['yoga', 'runner', 'smoothie'], ['runner', 'runner', 'yoga', 'smoothie']] },
+    { tx0: 157, tx1: 180, waves: [['runner', 'smoothie', 'runner'], ['yoga', 'runner', 'smoothie', 'runner'], ['runner', 'runner', 'runner', 'smoothie']] },
+  ];
   return m;
 }

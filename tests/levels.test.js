@@ -229,6 +229,27 @@ function standingSpots(map) {
   return [...seen.values()];
 }
 
+test('Запертые волны: 2–3 на Уровнях 1–4, без Ям и Контрольных точек внутри, Зожники — те же, что на Уровне', () => {
+  LEVELS.forEach((level, i) => {
+    const map = level.build(TS);
+    if (level.arena) { assert.equal(map.locks.length, 0); return; }
+    assert.ok(map.locks.length >= 2 && map.locks.length <= 3, `Уровень ${i + 1}: ${map.locks.length}`);
+    const kinds = kindsOf(map);
+    for (const l of map.locks) {
+      const w = l.tx1 - l.tx0 + 1;
+      assert.ok(w >= 15 && w <= 26, `ширина ${w}`);
+      for (let tx = l.tx0; tx <= l.tx1; tx++) assert.equal(map.get(tx, map.height - 1), TILE.SOLID, `Яма в ${tx}`);
+      for (const c of map.checkpoints) assert.ok(c.tx < l.tx0 || c.tx > l.tx1, `точка ${c.tx} внутри`);
+      assert.ok(l.tx0 * TS > map.spawn.x && l.tx1 < map.exit.tx, 'между стартом и выходом');
+      assert.ok(l.waves.length >= 2 && l.waves.length <= 3);
+      for (const wave of l.waves) {
+        assert.ok(wave.length >= 2 && wave.length <= 5);
+        for (const k of wave) assert.ok(kinds.has(k), `${k} не водится на Уровне ${i + 1}`);
+      }
+    }
+  });
+});
+
 test('Арена: на каждую платформу G-man Никич запрыгивает', () => {
   const map = LEVELS[4].build(TS);
   const spots = standingSpots(map);

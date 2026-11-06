@@ -26,6 +26,8 @@ export const BINDINGS = Object.freeze({
   pick2: ['Digit2', 'Numpad2'],
   pick3: ['Digit3', 'Numpad3'],
   debug: ['F3', 'Backquote'],
+  fullscreen: ['KeyF'],
+  mute: ['KeyM'],
 });
 
 export class Input {

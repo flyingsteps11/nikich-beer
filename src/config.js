@@ -3,6 +3,7 @@
 export const SCREEN = Object.freeze({
   width: 480,
   height: 270,
+  renderScale: 4,
 });
 
 export const LOOP = Object.freeze({
@@ -262,6 +263,21 @@ export const PHOTOS = Object.freeze({
   pkin: Object.freeze({ file: 'portrait-pkin.png', w: 74, h: 96 }),
   poker: Object.freeze({ file: 'portrait-poker.png', w: 80, h: 80 }),
   floor: Object.freeze({ file: 'portrait-floor.png', w: 96, h: 75 }),
+  headHappy: Object.freeze({ file: 'nikich-head.png', w: 17, h: 18, native: true }),
+  headJump: Object.freeze({ file: 'nikich-jump.png', w: 19, h: 15, native: true }),
+  headShoot: Object.freeze({ file: 'nikich-shoot.png', w: 12, h: 18, native: true }),
+  headHurt: Object.freeze({ file: 'nikich-hurt.png', w: 13.5, h: 18, native: true }),
+  headGrin: Object.freeze({ file: 'nikich-grin.png', w: 13, h: 18, native: true }),
+  headPout: Object.freeze({ file: 'nikich-pout.png', w: 18.5, h: 18, native: true }),
+  gmanHead: Object.freeze({ file: 'gman-head.png', w: 12, h: 18, native: true }),
+});
+
+export const FACES = Object.freeze({
+  hurtTime: 0.7,
+  moodTime: 1,
+  shootTime: 0.35,
+  jumpMinRise: 40,
+  lowHealth: 0.3,
 });
 
 export const TOAST = Object.freeze({
@@ -278,6 +294,15 @@ export const CREDITS = Object.freeze({
 export const CUTSCENE = Object.freeze({
   charsPerSec: 45,
   minTime: 0.4,
+});
+
+export const LOCKS = Object.freeze({
+  triggerTiles: 3,
+  firstDelay: 0.6,
+  spawnEvery: 0.55,
+  waveGap: 1.2,
+  gateInset: 10,
+  gateHeight: 48,
 });
 
 export const HIT_FLASH_TIME = 0.1; // с, Зожник мигает от попадания
@@ -304,4 +329,27 @@ export const CAMERA = Object.freeze({
 
 export const DEBUG = Object.freeze({
   fpsSmoothing: 0.1,
+});
+
+export const VOICE = Object.freeze({
+  dir: 'assets/voice/',
+  decodeRate: 22050,
+  volume: 0.9,
+  muteKey: 'nikich-beer:mute',
+  gmanRate: 0.8,
+  gruntCooldown: 0.9,
+  priority: Object.freeze({ grunt: 1, line: 2, event: 3 }),
+  chance: Object.freeze({ jump: 0.3, kill: 0.5 }),
+  groups: Object.freeze({
+    jump: Object.freeze(['ha-1', 'ha-2', 'ha-3']),
+    hit: Object.freeze(['blyat', 'nahuy']),
+    pit: Object.freeze(['blyat', 'nahuy']),
+    kill: Object.freeze(['laugh-1', 'laugh-2']),
+    victory: Object.freeze(['laugh-2']),
+    beerZero: Object.freeze(['bezalko']),
+    lose: Object.freeze(['pizdec']),
+    start: Object.freeze(['hello']),
+    levelDone: Object.freeze(['beer-156']),
+    final: Object.freeze(['first-can']),
+  }),
 });

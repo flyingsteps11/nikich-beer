@@ -337,3 +337,31 @@ test('оглушённый Никич (лекция) не ходит и не а�
   assert.ok(n.body.x > x);
   assert.notEqual(tryShoot(n), null);
 });
+
+test('выражение лица: обычное, прыжок, Щелбан, урон, настроение', async () => {
+  const { nikichFace, setFace } = await import('../src/nikich.js');
+  const { FACES } = await import('../src/config.js');
+  const map = arena();
+  const n = nikichAt(map, 100);
+  assert.equal(nikichFace(n), 'happy');
+  updateNikich(n, { move: 0, jumpPressed: true, jumpHeld: true, dropHeld: false }, DT, map, PHYSICS);
+  assert.equal(nikichFace(n), 'jump');
+  for (let i = 0; i < 120 && !n.body.onGround; i++) updateNikich(n, { ...IDLE, jumpHeld: true }, DT, map, PHYSICS);
+  assert.equal(nikichFace(n), 'happy');
+  tryShoot(n);
+  assert.equal(nikichFace(n), 'shoot');
+  for (let i = 0; i < Math.ceil(FACES.shootTime / DT) + 1; i++) updateNikich(n, IDLE, DT, map, PHYSICS);
+  assert.equal(nikichFace(n), 'happy');
+  setFace(n, 'grin');
+  tryShoot(n);
+  assert.equal(nikichFace(n), 'grin', 'настроение важнее Щелбана');
+  takeDamage(n, 10, 0);
+  assert.equal(nikichFace(n), 'hurt');
+  for (let i = 0; i < Math.ceil(FACES.hurtTime / DT) + 1; i++) updateNikich(n, IDLE, DT, map, PHYSICS);
+  assert.notEqual(nikichFace(n), 'hurt');
+  n.health = n.maxHealth * FACES.lowHealth;
+  assert.equal(nikichFace(n), 'hurt', 'мало здоровья');
+  n.health = n.maxHealth;
+  stunNikich(n, 1);
+  assert.equal(nikichFace(n), 'hurt', 'оглушён');
+});

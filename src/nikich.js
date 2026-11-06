@@ -2,7 +2,7 @@
 
 import { createBody, stepPlatformer, isBlocking, fellOut } from './physics.js';
 import { damageZoznik, stunZoznik, holdZoznik } from './zozniki.js';
-import { NIKICH, ATTACKS, SPEECH, ITEMS } from './config.js';
+import { NIKICH, ATTACKS, SPEECH, ITEMS, FACES } from './config.js';
 
 export function createNikich(x, y, N = NIKICH) {
   return {
@@ -17,6 +17,7 @@ export function createNikich(x, y, N = NIKICH) {
     aim: { x: 1, y: 0 }, // единичный вектор на курсор
     cooldowns: { shot: 0, dog: 0, stun: 0 },
     superMeter: 0,
+    face: { mood: null, t: 0, shoot: 0 },
     // Временные эффекты Предметов, с до конца (SPEC §7)
     effects: { vodka: 0, beer: 0, scooter: 0 },
     // Множители от Улучшений и Бонусов (этапы 4 и 6)
@@ -91,6 +92,9 @@ export function updateNikich(n, intent, dt, map, P, I = ITEMS) {
   n.stun = Math.max(0, n.stun - dt);
   n.effects.vodka = Math.max(0, n.effects.vodka - dt);
   n.effects.beer = Math.max(0, n.effects.beer - dt);
+  n.face.t = Math.max(0, n.face.t - dt);
+  n.face.shoot = Math.max(0, n.face.shoot - dt);
+  if (n.face.t <= 0) n.face.mood = null;
   const wasRiding = isRiding(n);
   const locked = n.hurtLock > 0 || n.stun > 0;
   const effective = locked ? { ...intent, move: 0, jumpPressed: false } : intent;
@@ -169,6 +173,7 @@ export function tryShoot(n, A = ATTACKS, N = NIKICH) {
   if (n.cooldowns.shot > 0 || !canAttack(n)) return null;
   const S = A.shot;
   n.cooldowns.shot = S.cooldown / n.mods.shotRateMul;
+  n.face.shoot = FACES.shootTime;
   const h = handPos(n, N);
   return {
     x: h.x,
@@ -315,6 +320,7 @@ export function takeDamage(n, amount, fromX, N = NIKICH) {
   n.health -= amount;
   n.invuln = N.invulnTime;
   n.hurtLock = N.hurtLockTime;
+  setFace(n, 'hurt', FACES.hurtTime);
   const c = centerOf(n.body);
   const dir = Math.sign(c.x - fromX) || -n.facing;
   n.body.vx = dir * N.knockbackX;
@@ -337,7 +343,22 @@ export function loseLife(n) {
   n.effects = { vodka: 0, beer: 0, scooter: 0 };
   n.stun = 0;
   n.hurtLock = 0;
+  setFace(n, 'hurt', FACES.hurtTime);
   return { gameOver: n.lives <= 0 };
+}
+
+export function setFace(n, mood, duration = FACES.moodTime) {
+  n.face.mood = mood;
+  n.face.t = duration;
+}
+
+export function nikichFace(n, F = FACES) {
+  if (n.stun > 0 || n.face.mood === 'hurt') return 'hurt';
+  if (n.face.mood) return n.face.mood;
+  if (n.face.shoot > 0) return 'shoot';
+  if (!n.body.onGround && n.body.vy < -F.jumpMinRise) return 'jump';
+  if (n.health <= n.maxHealth * F.lowHealth) return 'hurt';
+  return 'happy';
 }
 
 export function heal(n, amount) {

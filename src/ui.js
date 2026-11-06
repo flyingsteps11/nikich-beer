@@ -74,8 +74,10 @@ export function drawPhoto(ctx, img, x, y, w, h, scale = 1) {
   ctx.fillStyle = COLORS.text;
   ctx.fillRect(px - 2, py - 2, w * scale + 4, h * scale + 4);
   if (img) {
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = w * scale * ctx.getTransform().a < img.naturalWidth;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, px, py, w * scale, h * scale);
+    ctx.imageSmoothingEnabled = false;
   } else {
     ctx.fillStyle = '#2a2a3a';
     ctx.fillRect(px, py, w * scale, h * scale);
@@ -193,20 +195,30 @@ function bar(ctx, x, y, w, h, frac, color, back = '#2a2a3a') {
 
 // HUD: здоровье, жизни, шкала супера, эффекты Предметов, таймер, очки, перезарядки атак.
 // run: { timeText, lowTime, score }; effects: [{ label, left }]
-export function drawHud(ctx, n, A, time, run = null, effects = []) {
-  bar(ctx, 6, 6, 70, 6, n.health / n.maxHealth, '#e63946');
-  drawText(ctx, `${UI.lives} ${n.lives}`, 82, 4);
+export function drawHud(ctx, n, A, time, run = null, effects = [], face = null) {
+  const hx = face ? 28 : 6;
+  if (face) {
+    const low = n.health <= n.maxHealth * 0.3 && Math.floor(time * 3) % 2 === 0;
+    drawPhoto(ctx, face.img, 5, 4, 18, 21.6);
+    if (low || n.hurtLock > 0) {
+      ctx.fillStyle = 'rgba(230, 57, 70, 0.45)';
+      ctx.fillRect(5, 4, 18, 21.6);
+    }
+  }
+  bar(ctx, hx, 6, 70, 6, n.health / n.maxHealth, '#e63946');
+  drawText(ctx, `${UI.lives} ${n.lives}`, hx + 76, 4);
   effects.forEach((e, i) => {
-    drawText(ctx, `${e.label} ${Math.ceil(e.left)}`, 6, 24 + i * 9, { size: 7, color: e.color ?? COLORS.text });
+    drawText(ctx, `${e.label} ${Math.ceil(e.left)}`, 6, 30 + i * 9, { size: 7, color: e.color ?? COLORS.text });
   });
   if (run && run.timeText) {
     const blinkLow = run.lowTime && Math.floor(time * 2) % 2 === 0;
     drawText(ctx, run.timeText, W / 2 - 40, 3, { size: 12, align: 'center', bold: true, color: blinkLow ? '#e63946' : COLORS.text });
   }
   if (run) drawText(ctx, `${UI.score} ${run.score}`, W / 2 - 40, 17, { size: 7, align: 'center', color: COLORS.accent });
+  if (run && run.lockText) drawText(ctx, run.lockText, W / 2 - 40, 27, { size: 8, align: 'center', color: '#e63946', bold: true });
   const full = n.superMeter >= A.super.meterMax;
   const blink = full && Math.floor(time * 4) % 2 === 0;
-  bar(ctx, 6, 16, 70, 4, n.superMeter / A.super.meterMax, blink ? '#ffffff' : COLORS.accent);
+  bar(ctx, hx, 16, 70, 4, n.superMeter / A.super.meterMax, blink ? '#ffffff' : COLORS.accent);
 
   const slots = [
     [UI.keyShot, UI.abilityShot, n.cooldowns.shot, A.shot.cooldown],

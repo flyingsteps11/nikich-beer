@@ -19,6 +19,7 @@ export function createMap(width, height, tileSize) {
     exit: null, // зона выхода: { tx } — дошёл до этого столбца, Уровень пройден
     movers: [], // Трамваи: { tx0, tx1, ty, w, h, speed, pause } (см. createMovers)
     hints: [], // Подсказки управления: { tx, ty, text }
+    locks: [],
     // За левым и правым краем — стена, над картой и под ней — пусто (там Яма).
     get(tx, ty) {
       if (tx < 0 || tx >= width) return TILE.SOLID;
