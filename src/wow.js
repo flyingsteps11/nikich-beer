@@ -1,3 +1,5 @@
+import { drawTextCached, resetTextCache } from './textcache.js';
+import { createLru } from './cache.js';
 const BASE = 'assets/wow/';
 
 const FILES = Object.freeze({
@@ -70,10 +72,10 @@ function load(src) {
 
 export function wowTextures() {
   if (tex) return tex;
-  tex = { icons: {}, tints: new Map() };
+  tex = { icons: {} };
   if (typeof FontFace !== 'undefined' && typeof document !== 'undefined') {
     const face = new FontFace('Friz Quadrata TT', `url(${BASE.replace('wow/', 'fonts/')}frizqt___cyr.ttf)`);
-    face.load().then((f) => document.fonts.add(f)).catch(() => {});
+    face.load().then((f) => { document.fonts.add(f); resetTextCache(); bubbles.clear(); }).catch(() => {});
   }
   for (const [k, f] of Object.entries(FILES)) tex[k] = load(BASE + f);
   for (const [k, f] of Object.entries(ICON_FILES)) tex.icons[k] = load(`${BASE}icons/${f}.PNG`);
@@ -84,10 +86,16 @@ export function ok(img) {
   return Boolean(img && img.complete && img.naturalWidth);
 }
 
+// Подкрашенные текстуры: картинка → (цвет → холст); без строки img.src в каждом кадре
+const tintCache = new WeakMap();
+
 export function tinted(img, color) {
-  const T = wowTextures();
-  const key = `${img.src}|${color}`;
-  let cv = T.tints.get(key);
+  let byColor = tintCache.get(img);
+  if (!byColor) {
+    byColor = new Map();
+    tintCache.set(img, byColor);
+  }
+  let cv = byColor.get(color);
   if (cv) return cv;
   if (!ok(img)) return null;
   cv = document.createElement('canvas');
@@ -100,8 +108,38 @@ export function tinted(img, color) {
   g.fillRect(0, 0, cv.width, cv.height);
   g.globalCompositeOperation = 'destination-in';
   g.drawImage(img, 0, 0);
-  T.tints.set(key, cv);
+  byColor.set(color, cv);
   return cv;
+}
+
+// Неподвижная часть HUD (SPEC §13, фаза 2): текстура один раз масштабируется со
+// сглаживанием в картинку размером с экран, дальше — копия 1:1 без сглаживания.
+const bakedCache = new Map();
+
+export function baked(c, key, w, h, draw) {
+  const scale = Math.round(Math.abs(c.getTransform().a) * 100) / 100;
+  const k = `${key}|${scale}`;
+  let e = bakedCache.get(k);
+  if (!e) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.ceil(w * scale));
+    cv.height = Math.max(1, Math.ceil(h * scale));
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'medium';
+    g.scale(scale, scale);
+    draw(g);
+    e = { cv, w: cv.width / scale, h: cv.height / scale };
+    bakedCache.set(k, e);
+  }
+  return e;
+}
+
+export function drawBaked(c, e, x, y) {
+  const was = c.imageSmoothingEnabled;
+  c.imageSmoothingEnabled = false;
+  c.drawImage(e.cv, x, y, e.w, e.h);
+  c.imageSmoothingEnabled = was;
 }
 
 export function smooth(c, draw) {
@@ -123,21 +161,10 @@ export function drawIcon(c, name, x, y, s) {
 }
 
 export function wowText(c, text, x, y, { size = 6, color = WOW.white, align = 'left', outline = 0.8, base = 'middle', shadow = true } = {}) {
-  c.font = `${size}px ${WOW_FONT}`;
-  c.textAlign = align;
-  c.textBaseline = base;
-  if (shadow) {
-    c.fillStyle = 'rgba(0, 0, 0, 0.85)';
-    c.fillText(text, x + size * 0.08, y + size * 0.1);
-  }
-  if (outline) {
-    c.lineJoin = 'round';
-    c.lineWidth = outline;
-    c.strokeStyle = 'rgba(0, 0, 0, 0.95)';
-    c.strokeText(text, x, y);
-  }
-  c.fillStyle = color;
-  c.fillText(text, x, y);
+  drawTextCached(c, String(text), x, y, {
+    family: WOW_FONT, size, color, align, base, outline,
+    shadow: shadow ? { dx: size * 0.08, dy: size * 0.1, color: 'rgba(0, 0, 0, 0.85)' } : null,
+  });
 }
 
 export function statusFill(c, x, y, w, h, frac, color) {
@@ -252,20 +279,50 @@ export function drawButton(c, box, label, { selected = false, pressed = false, t
   wowText(c, label, x + w / 2 + (pressed ? 0.5 : 0), y + h / 2 + (pressed ? 0.5 : 0), { size, bold: true, align: 'center', color: selected ? '#ffffff' : WOW.gold, outline: 0.9 });
 }
 
-export function drawChatBubble(c, text, x, y, W) {
-  const T = wowTextures();
-  c.font = `7px ${WOW_FONT}`;
-  const w = Math.ceil(c.measureText(text).width) + 14;
-  const h = 15;
-  const bx = Math.max(2, Math.min(W - w - 2, x - w / 2));
-  const by = y - h - 4;
+function paintBubble(c, text, bx, by, w, h) {
   c.fillStyle = 'rgba(0, 0, 0, 0.72)';
   c.beginPath();
   c.roundRect(bx + 2, by + 2, w - 4, h - 4, 3);
   c.fill();
-  drawBackdrop(c, T.bubble, bx, by, w, h, 6);
-  if (ok(T.bubbleTail)) smooth(c, () => c.drawImage(T.bubbleTail, Math.max(bx + 4, Math.min(bx + w - 12, x - 4)), by + h - 2.6, 8, 8));
+  drawBackdrop(c, wowTextures().bubble, bx, by, w, h, 6);
   wowText(c, text, bx + w / 2, by + h / 2 + 0.3, { size: 7, bold: true, align: 'center', color: WOW.white, outline: 0 });
+}
+
+// Облачко реплики (рамка из 9 кусков + текст) запекается целиком на строку (SPEC §13, фаза 2)
+const bubbles = createLru(64);
+
+export function drawChatBubble(c, text, x, y, W) {
+  const T = wowTextures();
+  const h = 15;
+  const scale = Math.round(Math.abs(c.getTransform().a) * 100) / 100;
+  const key = `${scale}|${text}`;
+  let e = bubbles.get(key);
+  if (!e) {
+    c.font = `7px ${WOW_FONT}`;
+    const w = Math.ceil(c.measureText(text).width) + 14;
+    e = { w, cv: null };
+    if (ok(T.bubble)) {
+      e.cv = document.createElement('canvas');
+      e.cv.width = Math.ceil(w * scale);
+      e.cv.height = Math.ceil(h * scale);
+      const g = e.cv.getContext('2d');
+      g.scale(scale, scale);
+      paintBubble(g, text, 0, 0, w, h);
+      bubbles.set(key, e);
+    }
+  }
+  const w = e.w;
+  const bx = Math.max(2, Math.min(W - w - 2, x - w / 2));
+  const by = y - h - 4;
+  if (e.cv) {
+    const was = c.imageSmoothingEnabled;
+    c.imageSmoothingEnabled = false;
+    c.drawImage(e.cv, bx, by, e.cv.width / scale, e.cv.height / scale);
+    c.imageSmoothingEnabled = was;
+  } else {
+    paintBubble(c, text, bx, by, w, h);
+  }
+  if (ok(T.bubbleTail)) smooth(c, () => c.drawImage(T.bubbleTail, Math.max(bx + 4, Math.min(bx + w - 12, x - 4)), by + h - 2.6, 8, 8));
 }
 
 function wrap(c, text, maxW) {

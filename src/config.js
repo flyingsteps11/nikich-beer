@@ -13,6 +13,15 @@ export const LOOP = Object.freeze({
   cullMargin: 48, // px запаса по краям кадра, за ним объекты не рисуем
 });
 
+// SPEC §13, фаза 2: кэши отрисовки
+export const RENDER_CACHE = Object.freeze({
+  textEntries: 400, // строк текста в кэше картинок
+  chunkTiles: 32, // ширина куска тайлов, тайлов
+  chunkKeep: 4, // кусков тайлов в памяти (у камеры)
+  gaitFrames: 16, // кадров на цикл шага у Зожников
+  spriteEntries: 400, // кадров Зожников в кэше (~40 КБ каждый)
+});
+
 export const TILE_SIZE = 16;
 export const MAP_HEIGHT_TILES = 17; // SPEC §9
 

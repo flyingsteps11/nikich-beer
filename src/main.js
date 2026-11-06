@@ -2,7 +2,7 @@
 // Этап 6: титульный (Начать / Продолжить / Новая игра) → Уровень → Выбор Улучшения → … → Уровень 5 → титульный.
 // Проигрыш — тот же Уровень заново. Сохранение — после выбора Улучшения и при Проигрыше (SPEC §11).
 
-import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH, ITEMS, LEVEL, UPGRADES, GMAN, CUTSCENE, PHOTOS, TOAST, CREDITS, SPAWN, LOCKS, VOICE, DEATH, PROPS } from './config.js';
+import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH, ITEMS, LEVEL, UPGRADES, GMAN, CUTSCENE, PHOTOS, TOAST, CREDITS, SPAWN, LOCKS, VOICE, DEATH, PROPS, RENDER_CACHE } from './config.js';
 import { Input, bindInput, readMoveIntent } from './input.js';
 import { fellOut, moveX } from './physics.js';
 import {
@@ -22,7 +22,7 @@ import {
   updateZoznik, updateEnemyShots, contactDamage, separateFromBody, touching, recoil, createSpawner, updateSpawner, resetSpawner,
   spawnFromRequest, isFarBehind,
 } from './zozniki.js';
-import { buildTileset, drawTilesTextured } from './tiles.js';
+import { buildTileset, createTileChunks, drawTileChunks } from './tiles.js';
 import { setPosterImages, shufflePosters } from './signs.js';
 import { seededRandom } from './world.js';
 import { placeProps, buildPropSprites, buildGlow, drawProps, propLight } from './props.js';
@@ -586,6 +586,7 @@ class PlayScreen {
     this.glows = NIGHT_TIMES.has(this.level.theme.time) ? buildGlows(this.props) : null;
     this.worldH = SCREEN.height - HUD_BAR_HEIGHT;
     this.worldScale = Math.min(1, this.worldH / this.map.pixelHeight);
+    this.tileChunks = createTileChunks(this.map, this.tileset, makeCanvas, SCREEN.renderScale * this.worldScale, RENDER_CACHE.chunkTiles, RENDER_CACHE.chunkKeep);
     const viewW = SCREEN.width / this.worldScale;
     const viewH = this.worldH / this.worldScale;
     this.parallax = buildBackdrop(this.level.theme, this.map.pixelWidth, viewW, viewH, makeCanvas, levelIndex + 1);
@@ -1036,7 +1037,7 @@ class PlayScreen {
       drawText(c, UI.barSign, (bar.tx + bar.w / 2) * TILE_SIZE - camX, feetY - 56 - camY, { size: 8, align: 'center', color: COLORS.accent, bold: true });
     }
     for (const m of this.movers) if (seen(m.x + m.w / 2, m.w / 2)) drawTram(c, m, camX, camY);
-    drawTilesTextured(c, this.map, this.cam, this.tileset);
+    drawTileChunks(c, this.tileChunks, this.cam);
     drawProps(c, this.props, this.propSprites, camX, camY, this.cam.viewW, this.glows);
     for (const r of this.map.ramps) if (seen((r.tx + 0.5) * TILE_SIZE)) drawRamp(c, r.tx, r.ty, TILE_SIZE, camX, camY);
     for (const l of this.locks) {
@@ -1319,7 +1320,8 @@ function frame(now) {
 // &hz=30 — рисовать не чаще 30 раз в секунду (как монитор 30 Гц)
 function createBench(params) {
   const hz = Number(params.get('hz')) || 0;
-  const PH = [['прогрев', 1], ['обычно', 4], ['Опьянение 4', 4]];
+  Math.random = seededRandom(Number(params.get('seed')) || 1); // одна и та же сцена от прогона к прогону
+  const PH = [['прогрев', 4], ['обычно', 5], ['Опьянение 4', 5]]; // прогрев: догружаются картинки и кэши
   const KINDS = ['runner', 'smoothie', 'cyclist', 'yoga', 'runner', 'moto'];
   const t0 = performance.now();
   let shownAt = 0;

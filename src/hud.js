@@ -1,4 +1,4 @@
-import { wowTextures, ok, smooth, drawIcon, wowText, statusFill, tinted, drawInfoTooltip, WOW, WOW_FONT } from './wow.js';
+import { wowTextures, ok, smooth, baked, drawBaked, drawIcon, wowText, statusFill, tinted, drawInfoTooltip, WOW, WOW_FONT } from './wow.js';
 
 const TAU = Math.PI * 2;
 
@@ -176,17 +176,18 @@ function unitFrame(c, A, o, dt) {
   const mb = rect(FRAME.mana);
   if (o.manaMax) statusFill(c, mb.x, mb.y, mb.w, mb.h, o.mana / o.manaMax, COLORS.mana);
   if (ok(img)) {
-    smooth(c, () => {
-      c.save();
+    const cw = crop.sw * k;
+    const ch = crop.sh * k;
+    const ox = o.x + (crop.sx - FRAME.crop.sx) * k;
+    const oy = o.y + (crop.sy - FRAME.crop.sy) * k;
+    const e = baked(c, `frame|${o.elite ? 1 : 0}|${o.mirror ? 1 : 0}`, cw, ch, (g) => {
       if (o.mirror) {
-        c.translate(o.x * 2 + FRAME.crop.sw * k, 0);
-        c.scale(-1, 1);
+        g.translate(cw, 0);
+        g.scale(-1, 1);
       }
-      const ox = o.x + (crop.sx - FRAME.crop.sx) * k;
-      const oy = o.y + (crop.sy - FRAME.crop.sy) * k;
-      c.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, ox, oy, crop.sw * k, crop.sh * k);
-      c.restore();
+      g.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, cw, ch);
     });
+    drawBaked(c, e, o.mirror ? o.x * 2 + FRAME.crop.sw * k - ox - cw : ox, oy);
   }
   if (o.flash) {
     c.save();
@@ -237,9 +238,10 @@ function drawBar(c, x, y, progress) {
   c.fillRect(x, y + STRIP.xp.y * k, w, STRIP.xp.h * k);
   statusFill(c, x, y + STRIP.xp.y * k, w, STRIP.xp.h * k, progress, COLORS.xp);
   if (!ok(T.bar)) return;
-  smooth(c, () => {
-    STRIPS.forEach((s, i) => c.drawImage(T.bar, 0, s.sy, STRIP.w, STRIP.h, x + i * STRIP.w * k, y, STRIP.w * k, STRIP.h * k));
+  const e = baked(c, 'bar', w, STRIP.h * k, (g) => {
+    STRIPS.forEach((s, i) => g.drawImage(T.bar, 0, s.sy, STRIP.w, STRIP.h, i * STRIP.w * k, 0, STRIP.w * k, STRIP.h * k));
   });
+  drawBaked(c, e, x, y);
 }
 
 function drawCaps(c, x, y, w) {
@@ -248,14 +250,14 @@ function drawCaps(c, x, y, w) {
   const k = LAYOUT.capK;
   const s = 128 * k;
   const bottom = y + STRIP.h * LAYOUT.barK;
-  smooth(c, () => {
-    c.drawImage(T.cap, x - s + 30 * k, bottom - s, s, s);
-    c.save();
-    c.translate(x + w - 30 * k + s, 0);
-    c.scale(-1, 1);
-    c.drawImage(T.cap, 0, bottom - s, s, s);
-    c.restore();
+  const left = baked(c, 'cap|0', s, s, (g) => g.drawImage(T.cap, 0, 0, s, s));
+  const right = baked(c, 'cap|1', s, s, (g) => {
+    g.translate(s, 0);
+    g.scale(-1, 1);
+    g.drawImage(T.cap, 0, 0, s, s);
   });
+  drawBaked(c, left, x - s + 30 * k, bottom - s);
+  drawBaked(c, right, x + w - 30 * k, bottom - s);
 }
 
 function sweep(c, x, y, s, frac) {
@@ -507,7 +509,7 @@ function plate(c, x, y, w, frac, color, level, opts = {}) {
   if (opts.mana !== undefined) {
     statusFill(c, left + 4 * k, top + 9.5 * k, 101 * k, 2.5 * k, opts.mana, COLORS.mana);
   }
-  if (ok(T.plate)) smooth(c, () => c.drawImage(T.plate, 0, 15, 136, 17, left, top, 136 * k, h));
+  if (ok(T.plate)) drawBaked(c, baked(c, `plate|${w}`, 136 * k, h, (g) => g.drawImage(T.plate, 0, 15, 136, 17, 0, 0, 136 * k, h)), left, top);
   if (level === '??' && ok(T.skull)) smooth(c, () => c.drawImage(T.skull, left + 113 * k, top + 1.5 * k, 16 * k, 14 * k));
   else if (level !== undefined && level !== null) wowText(c, String(level), left + 120.5 * k, top + h / 2 + 0.2, { size: Math.max(3.4, 9 * k), align: 'center', color: WOW.gold, outline: 0.5 });
   return { left, top, h, k };

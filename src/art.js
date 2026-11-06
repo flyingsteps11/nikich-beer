@@ -1,7 +1,8 @@
 import {
   OUTLINE, shade, limb, blob, disc, shadowUnder, gait, airPose, STAND, breathe, humanoid, wheel, face, stripes, plaid,
 } from './rig.js';
-import { ZOZNIKI, DEATH, EFFECTS } from './config.js';
+import { ZOZNIKI, DEATH, EFFECTS, RENDER_CACHE } from './config.js';
+import { createLru, quantize, poseKey } from './cache.js';
 
 const SKIN = '#f0c8a0';
 const WHITE = '#ffffff';
@@ -36,16 +37,81 @@ function sneaker(color, sole = '#f4f1de') {
   };
 }
 
+// Фаза шага округлена до RENDER_CACHE.gaitFrames кадров на цикл — кадры повторяются и берутся из кэша
+const GAIT_STEP = TAU / RENDER_CACHE.gaitFrames;
+
 function walkPhase(x, stride) {
-  return (x / stride) * TAU;
+  return quantize((x / stride) * TAU, GAIT_STEP);
 }
 
 function movePose(b, time, { stride = 9, runAt = 60, amount = 1 } = {}) {
   if (!b.onGround) return airPose(b.vy);
   const speed = Math.abs(b.vx);
   if (speed < 6) return breathe(STAND, time);
-  const k = Math.min(1, speed / 60) * amount;
+  const k = quantize(Math.min(1, speed / 60) * amount, 0.25);
   return gait(walkPhase(b.x, stride), k, { run: speed > runAt });
+}
+
+// Кадры Зожников (SPEC §13, фаза 2): фигура в позе рисуется векторами один раз в картинку
+// размером с экран, дальше копируется. Близкие позы (ключ с округлением) делят кадр.
+// Рамки кадров (логические px, точка привязки — ноги): пешие и на колёсах
+const BOX_WALK = Object.freeze({ w: 26, h: 30, ax: 13, ay: 27 });
+const BOX_RIDE = Object.freeze({ w: 30, h: 34, ax: 15, ay: 31 });
+const sprites = createLru(RENDER_CACHE.spriteEntries);
+const lookIds = new Map();
+export const spriteStats = { built: 0 };
+let spritesOn = false;
+
+function sprite(c, fx, fy, key, box, draw) {
+  if (!spritesOn || typeof document === 'undefined') {
+    draw(c, fx, fy);
+    return;
+  }
+  const m = c.getTransform();
+  const scale = Math.round(Math.hypot(m.a, m.b) * 100) / 100;
+  const k = `${scale}|${key}`;
+  let e = sprites.get(k);
+  if (!e) {
+    const cv = document.createElement('canvas');
+    cv.width = Math.ceil(box.w * scale);
+    cv.height = Math.ceil(box.h * scale);
+    const g = cv.getContext('2d');
+    g.scale(scale, scale);
+    draw(g, box.ax, box.ay);
+    e = { cv, w: cv.width / scale, h: cv.height / scale };
+    sprites.set(k, e);
+    spriteStats.built += 1;
+  }
+  const was = c.imageSmoothingEnabled;
+  c.imageSmoothingEnabled = m.b !== 0; // повёрнутый (оглушение, прыжок мотоцикла) — со сглаживанием
+  c.drawImage(e.cv, fx - box.ax, fy - box.ay, e.w, e.h);
+  c.imageSmoothingEnabled = was;
+}
+
+// Номер кадра оборота колеса/шага 0..gaitFrames-1
+function gaitFrame(phase) {
+  const n = RENDER_CACHE.gaitFrames;
+  return ((Math.round(phase / GAIT_STEP) % n) + n) % n;
+}
+
+// Колесо с 6 спицами выглядит одинаково через каждые 60° — 8 кадров на этот период
+const SPOKE_STEP = Math.PI / 3 / 8;
+
+function spokeFrame(spin) {
+  return ((Math.round(spin / SPOKE_STEP) % 8) + 8) % 8;
+}
+
+function lookId(look) {
+  if (!lookIds.has(look)) lookIds.set(look, lookIds.size);
+  return lookIds.get(look);
+}
+
+function figure(c, fx, fy, dir, pose, look) {
+  if (pose.aim || pose.talk !== undefined) {
+    humanoid(c, fx, fy, dir, pose, look);
+    return;
+  }
+  sprite(c, fx, fy, `h${lookId(look)}|${dir}|${poseKey(pose, 1)}`, BOX_WALK, (g, x, y) => humanoid(g, x, y, dir, pose, look));
 }
 
 // Мигание при уроне: вторая отрисовка поверх в режиме lighter — без ctx.filter,
@@ -490,10 +556,10 @@ const KIND_DRAW = {
     const b = z.body;
     let pose;
     if (!b.onGround) pose = airPose(b.vy);
-    else if (Math.abs(b.vx) > 8) pose = gait(walkPhase(b.x, 11), Math.min(1, Math.abs(b.vx) / 50), { run: true });
-    else pose = gait(time * 9, 0.45, { run: true });
+    else if (Math.abs(b.vx) > 8) pose = gait(walkPhase(b.x, 11), quantize(Math.min(1, Math.abs(b.vx) / 50), 0.25), { run: true });
+    else pose = gait(quantize(time * 9, GAIT_STEP), 0.45, { run: true });
     pose.run = true;
-    humanoid(c, fx, fy, z.dir, pose, RUNNER);
+    figure(c, fx, fy, z.dir, pose, RUNNER);
     if (Math.floor(time * 2) % 3 === 0) sweat(c, fx + z.dir * 2, fy - 21, time);
   },
 
@@ -513,7 +579,7 @@ const KIND_DRAW = {
     } else {
       pose = movePose(b, time, { stride: 7, runAt: 999 });
     }
-    humanoid(c, fx, fy, z.dir, pose, YOGA);
+    figure(c, fx, fy, z.dir, pose, YOGA);
     if (z.state === 'pose') {
       c.globalAlpha = 0.35 + Math.sin(time * 2) * 0.15;
       c.strokeStyle = '#ffd6ff';
@@ -534,15 +600,19 @@ const KIND_DRAW = {
       pose.aim = [-2.6 + k * 4.4, -0.2];
       pose.noCup = k > 0.4;
     }
-    humanoid(c, fx, fy, z.dir, pose, HIPSTER);
+    figure(c, fx, fy, z.dir, pose, HIPSTER);
   },
 
   cyclist(c, z, fx, fy, time) {
     const b = z.body;
-    const spin = b.x / 3.6;
+    // Кадр — по фазе педалей: за их оборот колесо (6 спиц) проходит ровно 10 периодов — цикл без скачков
+    const pedal = quantize((b.x / 3.6) * 0.6, GAIT_STEP);
+    const spin = pedal / 0.6;
     const brake = z.state === 'brake';
-    drawBike(c, fx, fy, z.dir, spin, 0);
-    humanoid(c, fx - z.dir * 1.2, fy - 7.6, z.dir, riderPose(spin * 0.6, { lean: brake ? 0.3 : 0.85, pedal: !brake }), CYCLIST);
+    sprite(c, fx, fy, `cyc|${z.dir}|${brake ? 1 : 0}|${gaitFrame(pedal)}`, BOX_RIDE, (g, x, y) => {
+      drawBike(g, x, y, z.dir, spin, 0);
+      humanoid(g, x - z.dir * 1.2, y - 7.6, z.dir, riderPose(pedal, { lean: brake ? 0.3 : 0.85, pedal: !brake }), CYCLIST);
+    });
     if (brake && Math.abs(b.vx) > 20) {
       for (let i = 0; i < 3; i++) {
         const t = (time * 4 + i / 3) % 1;
@@ -555,19 +625,25 @@ const KIND_DRAW = {
 
   moto(c, z, fx, fy, time) {
     const b = z.body;
-    const spin = b.x / 4;
+    const spin = quantize(b.x / 4, SPOKE_STEP);
+    const dash = z.state === 'dash';
     const tilt = b.onGround ? 0 : Math.max(-0.5, Math.min(0.5, Math.atan2(b.vy, Math.abs(b.vx) + 1) * 0.6)) * -z.dir;
     c.save();
     c.translate(fx, fy - 4);
     c.rotate(tilt);
     c.translate(-fx, -(fy - 4));
-    drawMotorbike(c, fx, fy, z.dir, spin, time, z.state === 'dash');
-    humanoid(c, fx - z.dir * 1.6, fy - 9.4, z.dir, riderPose(0, { lean: 0.6, pedal: false }), MOTO);
+    const ride = (g, x, y) => {
+      drawMotorbike(g, x, y, z.dir, spin, time, dash);
+      humanoid(g, x - z.dir * 1.6, y - 9.4, z.dir, riderPose(0, { lean: 0.6, pedal: false }), MOTO);
+    };
+    // Рывок с пламенем зависит от времени — рисуем векторами
+    if (dash) ride(c, fx, fy);
+    else sprite(c, fx, fy, `moto|${z.dir}|${spokeFrame(spin)}`, BOX_RIDE, ride);
     c.restore();
   },
 
   dummy(c, z, fx, fy, time) {
-    humanoid(c, fx, fy, z.dir, breathe(STAND, time), DUMMY);
+    figure(c, fx, fy, z.dir, breathe(STAND, time), DUMMY);
   },
 };
 
@@ -586,7 +662,9 @@ export function drawZoznik(c, z, camX, camY, time, colors, deathT = -1) {
     c.rotate(Math.sin(time * 10) * 0.12);
     c.translate(-fx, -fy);
   }
+  spritesOn = !dead; // падение при смерти — векторами (поворот и масштаб)
   withFlash(c, z.flash > 0 && !dead, () => KIND_DRAW[z.kind](c, z, fx, fy, time));
+  spritesOn = false;
   c.restore();
   if (dead) {
     if (deathT < DEATH.poofTime) poof(c, fx, fy - b.h / 2, deathT / DEATH.poofTime);

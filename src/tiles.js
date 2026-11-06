@@ -1,5 +1,6 @@
 import { TILE } from './physics.js';
 import { seededRandom } from './world.js';
+import { createLru, chunkRange } from './cache.js';
 
 const VARIANTS = 4;
 
@@ -274,6 +275,58 @@ export function drawTilesTextured(ctx, map, cam, set) {
   const tx1 = Math.min(map.width - 1, Math.floor((camX + cam.viewW) / ts));
   const ty0 = Math.max(0, Math.floor(camY / ts) - 1);
   const ty1 = Math.min(map.height - 1, Math.floor((camY + cam.viewH) / ts));
+  drawTileRange(ctx, map, set, tx0, tx1, ty0, ty1, camX, camY);
+}
+
+// Куски тайлов (SPEC §13, фаза 2): тайлы не меняются за Уровень — собираем по
+// RENDER_CACHE.chunkTiles в ширину в готовую картинку, в кадре 1–2 drawImage вместо сотен
+export function createTileChunks(map, set, makeCanvas, res, chunk, keep) {
+  return { map, set, makeCanvas, res, chunk, lru: createLru(keep) };
+}
+
+function buildChunk(T, ci) {
+  const { map, set, res } = T;
+  const ts = map.tileSize;
+  const tx0 = ci * T.chunk;
+  const tx1 = Math.min(map.width - 1, tx0 + T.chunk - 1);
+  let top = Infinity;
+  let bottom = -1;
+  for (let ty = 0; ty < map.height; ty++) {
+    for (let tx = tx0; tx <= tx1; tx++) {
+      if (!tileImage(set, map, tx, ty)) continue;
+      top = Math.min(top, ty);
+      bottom = ty;
+      break;
+    }
+  }
+  if (bottom < 0) return { empty: true };
+  const ox = tx0 * ts;
+  const oy = top * ts - 6;
+  const cv = T.makeCanvas(Math.ceil((tx1 - tx0 + 1) * ts * res), Math.ceil(((bottom - top + 1) * ts + 6) * res));
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.scale(res, res);
+  drawTileRange(g, map, set, tx0, tx1, top, bottom, ox, oy);
+  return { cv, x: ox, y: oy, w: cv.width / res, h: cv.height / res };
+}
+
+export function drawTileChunks(ctx, T, cam) {
+  const ts = T.map.tileSize;
+  const camX = Math.round(cam.x);
+  const camY = Math.round(cam.y);
+  const [c0, c1] = chunkRange(camX, cam.viewW, ts, T.chunk, T.map.width);
+  for (let ci = c0; ci <= c1; ci++) {
+    let e = T.lru.get(ci);
+    if (!e) {
+      e = buildChunk(T, ci);
+      T.lru.set(ci, e);
+    }
+    if (!e.empty) ctx.drawImage(e.cv, e.x - camX, e.y - camY, e.w, e.h);
+  }
+}
+
+function drawTileRange(ctx, map, set, tx0, tx1, ty0, ty1, camX, camY) {
+  const ts = map.tileSize;
   for (let ty = ty0; ty <= ty1; ty++) {
     for (let tx = tx0; tx <= tx1; tx++) {
       const img = tileImage(set, map, tx, ty);

@@ -2,6 +2,7 @@
 
 import { SCREEN } from './config.js';
 import { UI, UPGRADE_TEXT } from './lines.js';
+import { drawTextCached } from './textcache.js';
 import { WOW, WOW_FONT, drawDialog, drawButton, drawChatBubble, drawIcon } from './wow.js';
 
 export { WOW, WOW_FONT };
@@ -18,21 +19,10 @@ export const COLORS = Object.freeze({
 });
 
 export function drawText(ctx, text, x, y, { size = 8, color = COLORS.text, align = 'left', shadow = true, bold = false, font = 'monospace', outline = 0 } = {}) {
-  ctx.font = `${bold ? 'bold ' : ''}${size}px ${font}`;
-  ctx.textAlign = align;
-  ctx.textBaseline = 'top';
-  if (shadow) {
-    ctx.fillStyle = COLORS.shadow;
-    ctx.fillText(text, Math.round(x) + 1, Math.round(y) + 1);
-  }
-  if (outline) {
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = outline;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)';
-    ctx.strokeText(text, Math.round(x), Math.round(y));
-  }
-  ctx.fillStyle = color;
-  ctx.fillText(text, Math.round(x), Math.round(y));
+  drawTextCached(ctx, String(text), Math.round(x), Math.round(y), {
+    family: font, size, bold, color, align, base: 'top', outline,
+    shadow: shadow ? { dx: 1, dy: 1, color: COLORS.shadow } : null,
+  });
 }
 
 function wowText(ctx, text, x, y, opts = {}) {
