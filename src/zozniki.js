@@ -45,8 +45,9 @@ export function isAlive(z) {
 
 // Наносит урон, возвращает сколько реально снято и убит ли.
 export function damageZoznik(z, amount) {
-  if (!z.alive || amount <= 0) return { dealt: 0, killed: false };
-  const dealt = Math.min(amount, z.health);
+  if (!z.alive || amount <= 0 || z.invuln > 0 || z.shielded) return { dealt: 0, killed: false };
+  const dealt = Math.min(amount * (z.takenMul ?? 1), z.health - (z.floor ?? 0));
+  if (dealt <= 0) return { dealt: 0, killed: false };
   z.health -= dealt;
   z.flash = HIT_FLASH_TIME;
   if (z.health <= 1e-9) {

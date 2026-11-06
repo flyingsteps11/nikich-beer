@@ -212,6 +212,33 @@ test('Трамвай — на Уровне 3; трамплины — на Уро
   assert.ok(maps[3].ramps.length > 0);
 });
 
+function standingSpots(map) {
+  const start = { x: map.spawn.x + (TS - W) / 2, y: map.spawn.y + TS - H };
+  const key = (p) => `${Math.round(p.x / 3)},${Math.round(p.y)}`;
+  const seen = new Map([[key(start), start]]);
+  const queue = [start];
+  while (queue.length) {
+    const p = queue.shift();
+    for (const a of actions()) {
+      const r = simulate(map, p.x, p.y, a, Infinity);
+      if (!r || r === 'exit' || seen.has(key(r))) continue;
+      seen.set(key(r), r);
+      queue.push(r);
+    }
+  }
+  return [...seen.values()];
+}
+
+test('Арена: на каждую платформу G-man Никич запрыгивает', () => {
+  const map = LEVELS[4].build(TS);
+  const spots = standingSpots(map);
+  for (const p of map.arena.perches) {
+    const feet = (p.ty + 1) * TS;
+    const ok = spots.some((s) => Math.abs(s.y + H - feet) < 0.5 && Math.abs(s.x + W / 2 - (p.tx * TS + TS / 2)) < 3 * TS);
+    assert.ok(ok, `платформа у тайла ${p.tx}`);
+  }
+});
+
 test('Таймер Уровня — на 1–4, на Уровне 5 только жизни', () => {
   assert.deepEqual(LEVELS.map((l) => l.timed), [true, true, true, true, false]);
 });

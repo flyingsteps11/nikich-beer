@@ -302,7 +302,7 @@ export function trySuper(n, zozniki, view, A = ATTACKS) {
   const hits = [];
   for (const z of zozniki) {
     if (z.alive && overlaps(z.body, view)) {
-      hits.push({ z, ...applyDamage(n, z, A.super.damage * damageMul(n), { charge: false }) });
+      hits.push({ z, ...applyDamage(n, z, A.super.damage * damageMul(n) * (z.superMul ?? 1), { charge: false }) });
     }
   }
   return { hits };

@@ -66,6 +66,23 @@ export function wrapText(ctx, text, maxW) {
   return lines;
 }
 
+export function drawPhoto(ctx, img, x, y, w, h, scale = 1) {
+  const px = Math.round(x);
+  const py = Math.round(y);
+  ctx.fillStyle = COLORS.shadow;
+  ctx.fillRect(px - 3, py - 3, w * scale + 6, h * scale + 6);
+  ctx.fillStyle = COLORS.text;
+  ctx.fillRect(px - 2, py - 2, w * scale + 4, h * scale + 4);
+  if (img) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, px, py, w * scale, h * scale);
+  } else {
+    ctx.fillStyle = '#2a2a3a';
+    ctx.fillRect(px, py, w * scale, h * scale);
+    drawText(ctx, '?', px + (w * scale) / 2, py + (h * scale) / 2 - 4, { align: 'center', color: COLORS.muted });
+  }
+}
+
 // Пункты меню титульного экрана: прямоугольники для мыши и отрисовки
 export function menuItemRect(i) {
   return { x: W / 2 - 90, y: H / 2 + 2 + i * 20, w: 180, h: 16 };
@@ -79,6 +96,9 @@ export function inRect(r, x, y) {
 export function drawTitle(ctx, time, menu) {
   ctx.fillStyle = COLORS.bg;
   ctx.fillRect(0, 0, W, H);
+  const bob = Math.round(Math.sin(time * 2) * 2);
+  if (menu.face) drawPhoto(ctx, menu.face.img, 30, 70 + bob, menu.face.w, menu.face.h);
+  if (menu.gman) drawPhoto(ctx, menu.gman.img, W - 30 - menu.gman.w, 70 - bob, menu.gman.w, menu.gman.h);
   drawText(ctx, UI.title, W / 2, H / 2 - 50, { size: 16, color: COLORS.accent, align: 'center', bold: true });
   if (menu.question) drawText(ctx, menu.question, W / 2, H / 2 - 18, { color: '#e63946', align: 'center' });
   else if (menu.note) drawText(ctx, menu.note, W / 2, H / 2 - 18, { size: 7, color: COLORS.muted, align: 'center' });
@@ -212,13 +232,31 @@ export function drawHud(ctx, n, A, time, run = null, effects = []) {
 
 // Реплика над головой (SPEC §5, §12)
 // Проигрыш (SPEC §4): «Я гнию изнутри» + фраза из пула, «Ещё раз». Фото «на полу» — этап 8.
-export function drawLose(ctx, reason, line, ready, time) {
+export function drawLose(ctx, reason, line, ready, time, photo = null) {
   ctx.fillStyle = 'rgba(20, 8, 12, 0.85)';
   ctx.fillRect(0, 0, W, H);
-  drawText(ctx, UI.loseTitle, W / 2, H / 2 - 44, { size: 16, color: '#e63946', align: 'center', bold: true });
-  drawText(ctx, reason, W / 2, H / 2 - 20, { color: COLORS.muted, align: 'center' });
-  drawText(ctx, `«${line}»`, W / 2, H / 2 - 4, { align: 'center' });
-  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.retry, W / 2, H / 2 + 26, { color: COLORS.accent, align: 'center' });
+  let cx = W / 2;
+  if (photo) {
+    drawPhoto(ctx, photo.img, 22, (H - photo.h * 2) / 2, photo.w, photo.h, 2);
+    cx = 22 + photo.w * 2 + (W - 22 - photo.w * 2) / 2;
+  }
+  drawText(ctx, UI.loseTitle, cx, H / 2 - 44, { size: 16, color: '#e63946', align: 'center', bold: true });
+  drawText(ctx, reason, cx, H / 2 - 20, { color: COLORS.muted, align: 'center' });
+  ctx.font = '8px monospace';
+  wrapText(ctx, `«${line}»`, photo ? W - 38 - photo.w * 2 : W - 40).forEach((l, i) => drawText(ctx, l, cx, H / 2 - 4 + i * 10, { align: 'center' }));
+  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.retry, cx, H / 2 + 30, { color: COLORS.accent, align: 'center' });
+}
+
+export function drawToast(ctx, photo, text, alpha) {
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  const s = 0.5;
+  const w = photo.w * s;
+  const h = photo.h * s;
+  const x = W - w - 10;
+  const y = 30;
+  drawPhoto(ctx, photo.img, x, y, photo.w, photo.h, s);
+  drawText(ctx, text, x + w / 2, y + h + 5, { size: 7, align: 'center', color: COLORS.accent, bold: true });
+  ctx.globalAlpha = 1;
 }
 
 // Уровень пройден: статистика и «дальше»
@@ -233,7 +271,7 @@ export function drawLevelDone(ctx, lines, prompt, ready, time) {
 export function drawBubble(ctx, text, x, y) {
   ctx.font = 'bold 8px monospace';
   const w = Math.ceil(ctx.measureText(text).width) + 6;
-  const bx = Math.round(x - w / 2);
+  const bx = Math.max(2, Math.min(W - w - 2, Math.round(x - w / 2)));
   const by = Math.round(y - 14);
   ctx.fillStyle = COLORS.text;
   ctx.fillRect(bx, by, w, 11);
@@ -242,4 +280,93 @@ export function drawBubble(ctx, text, x, y) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText(text, Math.round(x), by + 2);
+}
+
+export function drawBossBar(ctx, name, health, max, phaseHealth, shielded, time) {
+  const w = 160;
+  const x = Math.round(W / 2 - w / 2);
+  const y = 30;
+  drawText(ctx, name, W / 2, y - 10, { size: 7, align: 'center', color: COLORS.accent, bold: true });
+  const color = shielded && Math.floor(time * 8) % 2 === 0 ? '#ffffff' : '#5a76b8';
+  bar(ctx, x, y, w, 5, health / max, color);
+  ctx.fillStyle = COLORS.shadow;
+  for (let hp = phaseHealth; hp < max; hp += phaseHealth) ctx.fillRect(x + Math.round((w * hp) / max), y, 1, 5);
+}
+
+export function drawCutsceneBackdrop(ctx, time) {
+  ctx.fillStyle = '#07070c';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#12121e';
+  for (let i = 0; i < 9; i++) {
+    const x = ((i * 61 + time * 6) % (W + 40)) - 20;
+    ctx.fillRect(Math.round(x), 0, 1, H);
+  }
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, H - 60, W, 60);
+}
+
+export function drawCutsceneDialog(ctx, { label, name, text, page, pages, ready, time, speaker, photo }) {
+  if (speaker) drawPhoto(ctx, speaker.img, 6, 40, speaker.w, speaker.h, 2);
+  drawText(ctx, label, 170, 30, { size: 8, color: COLORS.muted });
+  drawText(ctx, name, 170, 41, { size: 12, color: COLORS.accent, bold: true });
+  const box = { x: 164, y: 70, w: W - 176, h: 110 };
+  if (photo) {
+    box.w -= photo.w + 12;
+    drawPhoto(ctx, photo.img, W - 12 - photo.w, box.y - 6, photo.w, photo.h);
+  }
+  ctx.fillStyle = 'rgba(34, 38, 58, 0.92)';
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.fillStyle = '#5a76b8';
+  ctx.fillRect(box.x, box.y, 2, box.h);
+  drawText(ctx, UI.bossName, box.x + 10, box.y + 8, { size: 8, color: '#9db4ff', bold: true });
+  ctx.font = '9px monospace';
+  wrapText(ctx, text, box.w - 20).forEach((l, i) => drawText(ctx, l, box.x + 10, box.y + 24 + i * 13, { size: 9 }));
+  drawText(ctx, `${page}/${pages}`, box.x + box.w - 8, box.y + box.h - 12, { size: 7, color: COLORS.muted, align: 'right' });
+  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.cutsceneHint, W / 2, H - 18, { size: 7, color: COLORS.accent, align: 'center' });
+}
+
+function drawMug(ctx, x, y, time) {
+  const foam = Math.round(Math.sin(time * 4));
+  ctx.fillStyle = '#f4f1de';
+  ctx.fillRect(x, y - 3 + foam, 22, 6);
+  ctx.fillStyle = '#e9a23b';
+  ctx.fillRect(x, y + 2, 22, 26);
+  ctx.fillStyle = '#ffd166';
+  ctx.fillRect(x + 3, y + 5, 4, 20);
+  ctx.strokeStyle = '#f4f1de';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x + 23, y + 8, 7, 12);
+}
+
+export function drawFinal(ctx, photo, lines, prompt, ready, time) {
+  ctx.fillStyle = '#2b1a12';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#4a2c1a';
+  for (let x = 0; x < W; x += 24) ctx.fillRect(x, 0, 2, H);
+  ctx.fillStyle = 'rgba(255, 209, 102, 0.12)';
+  ctx.beginPath();
+  ctx.arc(110, 130, 120 + Math.sin(time * 2) * 6, 0, Math.PI * 2);
+  ctx.fill();
+  drawPhoto(ctx, photo.img, 24, (H - photo.h * 2) / 2, photo.w, photo.h, 2);
+  const cx = 24 + photo.w * 2 + (W - 24 - photo.w * 2) / 2;
+  drawMug(ctx, cx - 15, 22, time);
+  drawText(ctx, UI.finalTitle, cx, 60, { size: 20, color: COLORS.accent, align: 'center', bold: true });
+  drawText(ctx, UI.finalPlace, cx, 86, { size: 8, color: COLORS.muted, align: 'center' });
+  lines.forEach((l, i) => drawText(ctx, l, cx, 108 + i * 12, { align: 'center' }));
+  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, prompt, cx, H - 30, { color: COLORS.accent, align: 'center' });
+}
+
+export function drawCredits(ctx, lines, offset, gap, done, time) {
+  ctx.fillStyle = COLORS.shadow;
+  ctx.fillRect(0, 0, W, H);
+  lines.forEach((l, i) => {
+    const y = H + i * gap - offset;
+    if (y < -12 || y > H) return;
+    const head = l.head;
+    drawText(ctx, head ? l.text : `«${l.text}»`, W / 2, y, { size: head ? 12 : 8, align: 'center', bold: head, color: head ? COLORS.accent : COLORS.text });
+  });
+  const hint = done ? UI.creditsAgain : UI.creditsSkip;
+  ctx.fillStyle = COLORS.shadow;
+  ctx.fillRect(0, H - 20, W, 20);
+  if (!done || Math.floor(time * 2) % 2 === 0) drawText(ctx, hint, W / 2, H - 14, { size: 7, align: 'center', color: done ? COLORS.accent : COLORS.muted });
 }

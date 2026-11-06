@@ -9,37 +9,94 @@ function rect(c, x, y, w, h, color) {
   c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 }
 
-// ---------- Никич 16×24 поверх хитбокса ----------
+const NIKICH_PAL = {
+  K: '#3a2a1e',
+  k: '#5a4030',
+  S: '#f0c8a0',
+  s: '#d9a77f',
+  A: '#1f2630',
+  a: '#c9ccd1',
+  m: '#b5654a',
+  G: '#9a9ea3',
+  g: '#7d8186',
+  H: '#cbb994',
+  h: '#a8976f',
+  L: '#e9c8a0',
+  O: '#eeeeee',
+  o: '#555555',
+};
+
+const NIKICH_TOP = [
+  '.....KKKKK......',
+  '....KKKKKKKk....',
+  '...KKKKKKKKKk...',
+  '...KKSSSSSSSK...',
+  '...KSSSSSSSSS...',
+  '...KSaAAAaAAAa..',
+  '...SSSAAASAAA...',
+  '...SSSSSSSSSSs..',
+  '....SSSSSmmSS...',
+  '....sSSSSSSSs...',
+  '.....sSSSSSs....',
+  '....GGGGGGGG....',
+  '...GGGGGGGGGG...',
+  '..GGGGGGGGGGGG..',
+  '..SGGGGGGGGGGS..',
+  '..SgGGGGGGGGgS..',
+  '...GGGGGGGGGG...',
+  '...HHHHHHHHHH...',
+  '...HHHHHHHHHH...',
+];
+
+const NIKICH_LEGS = {
+  stand: [
+    '...HHHh..hHHH...',
+    '....LL....LL....',
+    '....LL....LL....',
+    '...OOO....OOO...',
+    '...ooo....ooo...',
+  ],
+  run: [
+    '...HHHh..hHHH...',
+    '...LL......LL...',
+    '..LL........LL..',
+    '.OOO........OOO.',
+    '.ooo........ooo.',
+  ],
+  air: [
+    '...HHHh..hHHH...',
+    '...LLL....LLL...',
+    '...OOO....OOO...',
+    '...ooo....ooo...',
+    '................',
+  ],
+};
+
+export function nikichFrame(n, time) {
+  const b = n.body;
+  if (!b.onGround) return 'air';
+  if (Math.abs(b.vx) > 20 && !(n.effects.scooter > 0)) return Math.floor(time * 10) % 2 ? 'run' : 'stand';
+  return 'stand';
+}
 
 export function drawNikich(c, n, camX, camY, time, squash = 0) {
   const b = n.body;
   if (n.invuln > 0 && Math.floor(time * 20) % 2 === 0) return;
-  const w = Math.round(16 * (1 + squash * 2));
-  const h = Math.round(24 * (1 - squash * 2));
   const feetX = Math.round(b.x + b.w / 2 - camX);
   const feetY = Math.round(b.y + b.h - camY);
-  const x = feetX - Math.floor(w / 2);
-  const y = feetY - h;
-  const moving = b.onGround && Math.abs(b.vx) > 20 && !(n.effects.scooter > 0);
-  const bob = moving ? Math.floor(time * 10) % 2 : 0;
   const f = n.facing;
   const riding = n.effects.scooter > 0;
   if (riding) drawScooterUnder(c, feetX, feetY, f, time);
-
-  const step = moving ? Math.floor(time * 10) % 2 : 0;
-  rect(c, x + 4 + step * 2, y + h - 5, 3, 5, '#e9c8a0'); // ноги
-  rect(c, x + w - 7 - step * 2, y + h - 5, 3, 5, '#e9c8a0');
-  rect(c, x + 3, y + h - 10 + bob, w - 6, 5, '#c8b28a'); // шорты
-  rect(c, x + 2, y + Math.round(h * 0.38) + bob, w - 4, Math.round(h * 0.2) + 2, '#8a8d91'); // футболка
-  rect(c, x + 3, y + 1 + bob, w - 6, Math.round(h * 0.36), SKIN); // голова
-  rect(c, x + 3, y + bob, w - 6, 3, '#2a2018'); // волосы
-  rect(c, f > 0 ? x + 3 : x + w - 5, y + bob, 2, 5, '#2a2018');
-  rect(c, f > 0 ? x + w - 9 : x + 4, y + 5 + bob, 5, 2, '#1b1b1b'); // авиаторы
-  // рука к прицелу
+  const rows = [...NIKICH_TOP, ...NIKICH_LEGS[nikichFrame(n, time)]];
+  const bob = nikichFrame(n, time) === 'run' ? 1 : 0;
+  c.save();
+  c.translate(feetX, feetY);
+  c.scale(1 + squash * 2, 1 - squash * 2);
+  drawPixels(c, rows, NIKICH_PAL, -8, -24 - bob, f < 0, 1, { tint: n.hurtLock > 0 ? '#ff6b6b' : undefined });
+  c.restore();
   const hy = feetY - b.h + 9;
-  rect(c, feetX + n.aim.x * 7 - 1, hy + n.aim.y * 7 - 1, 2, 2, SKIN);
-  // оглушён лекцией — звёздочки над головой
-  if (n.stun > 0) stars(c, feetX, y - 3, time, '#c77dff');
+  rect(c, feetX + n.aim.x * 8 - 1, hy + n.aim.y * 8 - 1, 2, 2, NIKICH_PAL.S);
+  if (n.stun > 0) stars(c, feetX, feetY - 28, time, '#c77dff');
 }
 
 // ---------- Зожники ----------
@@ -281,4 +338,153 @@ export function drawCheckpoint(c, x, feetY, reached, camX, camY) {
   const py = Math.round(feetY - camY);
   rect(c, px, py - 22, 1, 22, '#adb5bd');
   rect(c, px + 1, py - 22, 8, 5, reached ? '#f4d35e' : '#6c757d');
+}
+
+const GMAN_PAL = {
+  K: '#6b4226',
+  S: '#f0c8a0',
+  s: '#d9a77f',
+  E: '#1b1b1b',
+  m: '#a0522d',
+  W: '#efe6d2',
+  T: '#7a4a24',
+  t: '#5a3418',
+  B: '#2f4a8a',
+  b: '#22356a',
+  c: '#5a76b8',
+  O: '#5a2e1a',
+};
+
+const GMAN_ROWS = [
+  '....KKKKKK......',
+  '...KKKKKKKKK....',
+  '...KKSSSSSSK....',
+  '...KSSSESSES....',
+  '...KSSSSSSSSs...',
+  '....SSSSSSSS....',
+  '....sSSSSmmS....',
+  '.....sSSSSS.....',
+  '....WWWTTWWW....',
+  '..bBBBWTTWBBBb..',
+  '.bBBBBWTTWBBBBb.',
+  '.bBcBBBTTBBBcBb.',
+  '.bBBBBBTtBBBBBb.',
+  '.bBcBBBBBBBBcBb.',
+  '.SBBBBBBBBBBBBS.',
+  '..BBBBBBBBBBBB..',
+  '..BBBBBBcBBBBB..',
+  '...BBBB..BBBB...',
+  '...BBBB..BBBB...',
+  '...bBBB..BBBb...',
+  '...BBBB..BBBB...',
+  '...BBBB..BBBB...',
+  '..OOOOO..OOOOO..',
+  '..OOOOO..OOOOO..',
+];
+
+function hash01(x, y) {
+  let h = (x * 374761393 + y * 668265263) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function drawPixels(c, rows, pal, left, top, flip, scale, opts = {}) {
+  const w = rows[0].length;
+  for (let ry = 0; ry < rows.length; ry++) {
+    const row = rows[ry];
+    for (let rx = 0; rx < w; rx++) {
+      const ch = row[rx];
+      if (ch === '.') continue;
+      let dy = 0;
+      if (opts.dissolve) {
+        const h = hash01(rx, ry);
+        if (h < opts.dissolve - 0.25) continue;
+        if (h < opts.dissolve) dy = -Math.round((opts.dissolve - h) * 40);
+      }
+      const px = flip ? w - 1 - rx : rx;
+      rect(c, left + px * scale, top + (ry + dy) * scale, scale, scale, opts.tint ?? pal[ch]);
+    }
+  }
+}
+
+function drawBriefcase(c, x, y, s) {
+  rect(c, x, y + s, 6 * s, 4 * s, '#5a3418');
+  rect(c, x + 2 * s, y, 2 * s, s, '#3a2410');
+  rect(c, x, y + 2 * s, 6 * s, s, '#7a4a24');
+}
+
+function drawShaker(c, x, y, s) {
+  rect(c, x, y, 3 * s, 5 * s, '#f4f1de');
+  rect(c, x, y + 2 * s, 3 * s, 2 * s, '#ff8fab');
+  rect(c, x, y - s, 3 * s, s, '#212529');
+}
+
+export function drawGmanFigure(c, feetX, feetY, facing, scale, opts = {}) {
+  const w = 16 * scale;
+  const h = 24 * scale;
+  const left = Math.round(feetX - w / 2);
+  const top = Math.round(feetY - h);
+  const flip = facing < 0;
+  const handX = flip ? left : left + w - 2 * scale;
+  const handY = top + 14 * scale;
+  if (opts.briefcase && !opts.shaker) drawBriefcase(c, flip ? handX - 4 * scale : handX - scale, handY + scale, scale);
+  drawPixels(c, GMAN_ROWS, GMAN_PAL, left, top, flip, scale, opts);
+  if (opts.shaker) drawShaker(c, flip ? left + 3 * scale : left + w - 6 * scale, top + 4 * scale, scale);
+  if (opts.tie) rect(c, left + 7 * scale, top + 9 * scale, 2 * scale, 2 * scale, GMAN_PAL.S);
+}
+
+export function drawGman(c, g, camX, camY, time, colors, dissolveTime) {
+  if (g.state === 'gone') return;
+  const b = g.body;
+  if (g.act === 'vanish' && Math.floor(time * 24) % 2 === 0) return;
+  const feetX = Math.round(b.x + b.w / 2 - camX);
+  const feetY = Math.round(b.y + b.h - camY);
+  const dissolve = g.state === 'dissolve' ? 1.25 * (1 - g.timer / dissolveTime) : 0;
+  drawGmanFigure(c, feetX, feetY, g.dir, 1, {
+    briefcase: g.phase <= 1,
+    shaker: g.state === 'creatine',
+    tie: g.state === 'tie' && Math.floor(time * 6) % 2 === 0,
+    dissolve,
+    tint: g.flash > 0 ? WHITE : undefined,
+  });
+  if (g.windup > 0) {
+    c.strokeStyle = colors.accent;
+    c.lineWidth = 1;
+    c.beginPath();
+    c.arc(feetX, feetY - 12, 14 + Math.sin(time * 30) * 2, 0, Math.PI * 2);
+    c.stroke();
+  }
+  if (g.stun > 0) stars(c, feetX, feetY - 27, time, colors.accent);
+}
+
+export function drawEnemyShot(c, s, camX, camY, time) {
+  const x = Math.round(s.x - camX);
+  const y = Math.round(s.y - camY);
+  if (s.kind === 'briefcase') {
+    const spin = Math.floor(time * 12) % 2;
+    if (spin) drawBriefcase(c, x - 3, y - 3, 1);
+    else {
+      rect(c, x - 2, y - 3, 4, 6, '#5a3418');
+      rect(c, x - 2, y - 1, 4, 1, '#7a4a24');
+    }
+  } else if (s.kind === 'butt') {
+    drawShot(c, s, camX, camY);
+    rect(c, x - 1, y - 1, 3, 1, '#9db4ff');
+  } else {
+    drawSmoothieShot(c, s, camX, camY);
+  }
+}
+
+export function drawBarDoor(c, x, feetY, w, open, camX, camY) {
+  const left = Math.round(x - camX);
+  const top = Math.round(feetY - 40 - camY);
+  rect(c, left - 2, top - 2, w + 4, 42, '#4a2c1a');
+  rect(c, left, top, w, 40, open ? '#ffd166' : '#2b1a12');
+  if (open) {
+    rect(c, left + 2, top + 2, w - 4, 36, '#ffe8a3');
+    rect(c, left + w - 6, top + 2, 4, 36, '#6c4426');
+  } else {
+    rect(c, left + w / 2 - 1, top, 2, 40, '#1b100a');
+    rect(c, left + w / 2 + 3, top + 20, 2, 3, '#f4d35e');
+  }
 }

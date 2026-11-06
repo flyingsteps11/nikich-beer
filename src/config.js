@@ -199,6 +199,87 @@ export const SPAWN = Object.freeze({
   surfaceSearchTiles: 6, // сколько тайлов вправо искать опору у края экрана
 });
 
+export const GMAN = Object.freeze({
+  w: 12, h: 24,
+  health: 600,
+  phaseHealth: 200,
+  introDelay: 1.5,
+  creatineTime: 1.5,
+  respawnGrace: 1.5,
+  runSpeed: 90,
+  takenMul: 0.6,
+  superMul: 0.25,
+  briefcase: Object.freeze({
+    aimTime: 0.7,
+    throwEvery: 0.9,
+    throws: 3,
+    vanishTime: 0.5,
+    damage: 25,
+    gravity: 600,
+    flightPerPx: 1 / 200,
+    minFlight: 0.6,
+    maxFlight: 1.2,
+    life: 3,
+  }),
+  summon: Object.freeze({
+    firstWave: 0.5,
+    waveEvery: 4,
+    maxAlive: 8,
+    waves: Object.freeze([
+      Object.freeze(['runner', 'runner']),
+      Object.freeze(['smoothie', 'runner']),
+      Object.freeze(['yoga', 'runner', 'runner']),
+      Object.freeze(['cyclist', 'smoothie']),
+    ]),
+    throwEvery: 2.5,
+  }),
+  mirror: Object.freeze({
+    keepDistance: 40,
+    shotCooldown: 0.45,
+    shotRange: 200,
+    shotSpeed: 220,
+    shotDamage: 10,
+    stunCooldown: 5,
+    stunRadius: 60,
+    stunTrigger: 0.8,
+    stunWindup: 0.45,
+    stunTime: 1,
+    stunDamage: 5,
+    touchDamage: 15,
+    jumpRise: 20,
+    maxRise: 52,
+    jumpAlign: 18,
+    jumpCooldown: 0.6,
+  }),
+  tieTime: 1.2,
+  dissolveTime: 1.6,
+});
+
+export const PHOTOS = Object.freeze({
+  face: Object.freeze({ file: 'portrait-face.png', w: 80, h: 96 }),
+  gman: Object.freeze({ file: 'portrait-gman.png', w: 72, h: 96 }),
+  happy: Object.freeze({ file: 'portrait-happy.png', w: 90, h: 96 }),
+  pkin: Object.freeze({ file: 'portrait-pkin.png', w: 74, h: 96 }),
+  poker: Object.freeze({ file: 'portrait-poker.png', w: 80, h: 80 }),
+  floor: Object.freeze({ file: 'portrait-floor.png', w: 96, h: 75 }),
+});
+
+export const TOAST = Object.freeze({
+  time: 1.6,
+  fade: 0.3,
+});
+
+export const CREDITS = Object.freeze({
+  speed: 22,
+  lineGap: 13,
+  finalDelay: 1.2,
+});
+
+export const CUTSCENE = Object.freeze({
+  charsPerSec: 45,
+  minTime: 0.4,
+});
+
 export const HIT_FLASH_TIME = 0.1; // с, Зожник мигает от попадания
 
 export const SPEECH = Object.freeze({

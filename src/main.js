@@ -2,7 +2,7 @@
 // Этап 6: титульный (Начать / Продолжить / Новая игра) → Уровень → Выбор Улучшения → … → Уровень 5 → титульный.
 // Проигрыш — тот же Уровень заново. Сохранение — после выбора Улучшения и при Проигрыше (SPEC §11).
 
-import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH, ITEMS, LEVEL, UPGRADES } from './config.js';
+import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH, ITEMS, LEVEL, UPGRADES, GMAN, CUTSCENE, PHOTOS, TOAST, CREDITS } from './config.js';
 import { Input, bindInput, readMoveIntent } from './input.js';
 import { fellOut, moveX } from './physics.js';
 import {
@@ -22,15 +22,17 @@ import {
   updateZoznik, updateEnemyShots, contactDamage, createSpawner, updateSpawner, resetSpawner,
   spawnFromRequest, isFarBehind,
 } from './zozniki.js';
+import { createGman, updateGman, gmanContactDamage, gmanGrace, isGone, sceneLines } from './gman.js';
 import {
-  drawNikich, drawZoznik, drawDog, drawShot, drawSmoothieShot, drawDoor, drawRamp, drawItem, drawCheckpoint,
-  drawTram,
+  drawNikich, drawZoznik, drawDog, drawShot, drawDoor, drawRamp, drawItem, drawCheckpoint,
+  drawTram, drawGman, drawEnemyShot, drawBarDoor,
 } from './art.js';
 import { LEVELS } from './levels/index.js';
 import {
   drawSign, drawLevelBanner, drawTitle, drawUpgradeChoice, menuItemRect, upgradeCardRect, inRect, drawPause, drawCrosshair, drawText, drawBubble, drawHud, drawLose, drawLevelDone, COLORS,
+  drawBossBar, drawCutsceneBackdrop, drawCutsceneDialog, drawToast, drawFinal, drawCredits,
 } from './ui.js';
-import { UI, LINES } from './lines.js';
+import { UI, LINES, NIKICH_LINE_KEYS } from './lines.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -48,6 +50,20 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
+
+function loadPhoto(spec) {
+  const photo = { img: null, w: spec.w, h: spec.h };
+  const img = new Image();
+  img.onload = () => {
+    photo.w = img.naturalWidth;
+    photo.h = img.naturalHeight;
+    photo.img = img;
+  };
+  img.src = `assets/img/${spec.file}`;
+  return photo;
+}
+
+const photos = Object.fromEntries(Object.entries(PHOTOS).map(([k, spec]) => [k, loadPhoto(spec)]));
 
 // ---------- Машина экранов: стек, верхний получает update ----------
 
@@ -119,15 +135,15 @@ class TitleScreen {
     if (this.confirmErase) {
       if (i === 1) {
         clearSave(storage);
-        machine.replace(new PlayScreen(0, newCampaign()));
+        machine.replace(new CutsceneScreen(0, newCampaign()));
       } else {
         this.confirmErase = false;
         this.menu.selected = 1;
       }
     } else if (!this.save) {
-      machine.replace(new PlayScreen(0, newCampaign()));
+      machine.replace(new CutsceneScreen(0, newCampaign()));
     } else if (i === 0) {
-      machine.replace(new PlayScreen(this.save.level - 1, this.save));
+      machine.replace(new CutsceneScreen(this.save.level - 1, this.save));
     } else {
       this.confirmErase = true;
       this.menu.selected = 0; // по умолчанию — «Нет»
@@ -141,16 +157,18 @@ class TitleScreen {
     }
     drawTitle(c, this.time, {
       items: this.items(), selected: this.menu.selected, question: this.confirmErase ? UI.eraseQuestion : null, note,
+      face: photos.face, gman: photos.gman,
     });
   }
 }
 
 // Выбор Улучшения после Уровня (SPEC §8): 1 из 3, сохранение, следующий Уровень
 class UpgradeScreen {
-  constructor(under, campaign, nextIndex) {
+  constructor(under, campaign, nextIndex, prev) {
     this.under = under;
     this.campaign = campaign;
     this.nextIndex = nextIndex;
+    this.prev = prev;
     this.choices = rollChoices();
     this.menu = { selected: 0, mx: -1, my: -1 };
     this.time = 0;
@@ -168,12 +186,63 @@ class UpgradeScreen {
     cp.upgrades.push(this.choices[i]);
     cp.level = this.nextIndex + 1;
     writeSave(storage, cp);
-    machine.replace(new PlayScreen(this.nextIndex, cp));
+    machine.replace(new CutsceneScreen(this.nextIndex, cp, this.prev));
   }
 
   draw(c) {
     this.under.draw(c);
     drawUpgradeChoice(c, this.choices, this.menu.selected, this.time >= RESULT_DELAY, this.time);
+  }
+}
+
+class CutsceneScreen {
+  constructor(levelIndex, campaign, prev = null) {
+    this.levelIndex = levelIndex;
+    this.campaign = campaign;
+    this.lines = sceneLines(levelIndex, prev);
+    this.page = 0;
+    this.time = 0;
+    this.lineTime = 0;
+  }
+
+  typed() {
+    return Math.floor(this.lineTime * CUTSCENE.charsPerSec);
+  }
+
+  start() {
+    machine.replace(new PlayScreen(this.levelIndex, this.campaign));
+  }
+
+  update(dt) {
+    this.time += dt;
+    this.lineTime += dt;
+    if (input.wasPressed('pause')) { this.start(); return; }
+    if (this.time < CUTSCENE.minTime || !input.wasPressed('confirm')) return;
+    if (this.typed() < this.lines[this.page].length) {
+      this.lineTime = this.lines[this.page].length / CUTSCENE.charsPerSec;
+    } else if (this.page + 1 < this.lines.length) {
+      this.page += 1;
+      this.lineTime = 0;
+    } else {
+      this.start();
+    }
+  }
+
+  draw(c) {
+    drawCutsceneBackdrop(c, this.time);
+    const text = this.lines[this.page];
+    drawCutsceneDialog(c, {
+      label: `${UI.levelLabel} ${this.levelIndex + 1}`,
+      name: UI.levelNames[this.levelIndex],
+      text: text.slice(0, this.typed()),
+      page: this.page + 1,
+      pages: this.lines.length,
+      ready: this.time >= CUTSCENE.minTime,
+      time: this.time,
+      speaker: photos.gman,
+      photo: this.levelIndex === 3 ? photos.pkin : null,
+    });
+    if (input.mouse.inside) drawCrosshair(c, input.mouse.x, input.mouse.y);
   }
 }
 
@@ -206,12 +275,12 @@ class LoseScreen {
   update(dt) {
     this.time += dt;
     if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) {
-      machine.replace(new PlayScreen(this.under.levelIndex, this.under.campaign));
+      machine.replace(new PlayScreen(this.under.levelIndex, this.under.campaign, this.under.retries + 1));
     }
   }
   draw(c) {
     this.under.draw(c);
-    drawLose(c, this.reason, this.line, this.time >= RESULT_DELAY, this.time);
+    drawLose(c, this.reason, this.line, this.time >= RESULT_DELAY, this.time, photos.floor);
   }
 }
 
@@ -235,7 +304,8 @@ class LevelDoneScreen {
     this.time += dt;
     if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) {
       if (this.next < LEVELS.length) {
-        machine.replace(new UpgradeScreen(this.under, this.under.campaign, this.next));
+        const prev = { flawless: this.under.stats.deaths === 0 && this.under.retries === 0 };
+        machine.replace(new UpgradeScreen(this.under, this.under.campaign, this.next, prev));
       } else {
         clearSave(storage); // игра пройдена — на титульном снова «Начать»
         machine.replace(new TitleScreen());
@@ -249,6 +319,69 @@ class LevelDoneScreen {
   }
 }
 
+function statLines(stats) {
+  return [
+    `${UI.statKills}: ${stats.kills}`,
+    `${UI.statShots}: ${stats.shots}`,
+    `${UI.statDeaths}: ${stats.deaths}`,
+    `${UI.statTime}: ${formatTime(stats.timeMs / 1000)}`,
+  ];
+}
+
+class FinalScreen {
+  constructor(under) {
+    this.time = 0;
+    const cp = under.campaign;
+    cp.stats = addLevelStats(cp.stats, under.stats);
+    this.lines = statLines(cp.stats);
+    clearSave(storage);
+  }
+  update(dt) {
+    this.time += dt;
+    if (this.time >= CREDITS.finalDelay && input.wasPressed('confirm')) machine.replace(new CreditsScreen());
+  }
+  draw(c) {
+    drawFinal(c, photos.happy, this.lines, UI.next, this.time >= CREDITS.finalDelay, this.time);
+  }
+}
+
+function creditLines() {
+  const seen = new Set();
+  const out = [{ text: UI.creditsTitle, head: true }, { text: '', head: true }];
+  for (const key of NIKICH_LINE_KEYS) {
+    for (const text of LINES[key]) {
+      if (seen.has(text)) continue;
+      seen.add(text);
+      out.push({ text });
+    }
+  }
+  out.push({ text: '', head: true }, { text: UI.creditsThanks, head: true });
+  return out;
+}
+
+class CreditsScreen {
+  constructor() {
+    this.lines = creditLines();
+    this.time = 0;
+    this.offset = 0;
+    this.end = SCREEN.height / 2 + this.lines.length * CREDITS.lineGap;
+  }
+  done() {
+    return this.offset >= this.end;
+  }
+  update(dt) {
+    this.time += dt;
+    if (!this.done()) this.offset = Math.min(this.end, this.offset + CREDITS.speed * dt);
+    if (input.wasPressed('pause')) { machine.replace(new TitleScreen()); return; }
+    if (this.time < RESULT_DELAY || !input.wasPressed('confirm')) return;
+    if (this.done()) machine.replace(new CutsceneScreen(0, newCampaign()));
+    else this.offset = this.end;
+  }
+  draw(c) {
+    drawCredits(c, this.lines, this.offset, CREDITS.lineGap, this.done(), this.time);
+  }
+}
+
 const LEVEL_BANNER_TIME = 2.5; // с, название Уровня на старте
 
 function makeCanvas(w, h) {
@@ -259,9 +392,10 @@ function makeCanvas(w, h) {
 }
 
 class PlayScreen {
-  constructor(levelIndex = 0, campaign = newCampaign()) {
+  constructor(levelIndex = 0, campaign = newCampaign(), retries = 0) {
     this.levelIndex = levelIndex;
     this.campaign = campaign;
+    this.retries = retries;
     this.level = LEVELS[levelIndex];
     this.map = this.level.build(TILE_SIZE);
     this.parallax = buildParallax(this.level.theme, this.map.pixelWidth, SCREEN.width, SCREEN.height, makeCanvas, levelIndex + 1);
@@ -283,6 +417,8 @@ class PlayScreen {
     this.items = itemsFromMap(this.map.items, TILE_SIZE);
     this.items.push(...itemsFromMap(extraScooterDefs(this.map, this.n.mods.extraScooters), TILE_SIZE));
     this.checkpoints = createCheckpoints(this.map);
+    this.gman = this.map.arena ? createGman(this.map) : null;
+    this.toast = 0;
     // Прохождение Уровня: таймер, очки, статистика (SPEC §4, §9)
     this.run = { timer: this.level.timed ? createTimer(LEVEL.time) : null, score: 0, stats: { kills: 0, shots: 0, deaths: 0, time: 0 } };
     this.stats = this.run.stats;
@@ -325,6 +461,7 @@ class PlayScreen {
     this.dogs = [];
     this.respawn();
     resetSpawner(this.spawner, this.body.x);
+    if (this.gman) gmanGrace(this.gman, this.map);
   }
 
   hurt(amount, fromX) {
@@ -397,8 +534,50 @@ class PlayScreen {
     for (const h of hits) {
       const zb = h.z.body;
       this.floater(h.x ?? zb.x + zb.w / 2, h.y ?? zb.y, h.dealt);
-      if (h.killed) this.onKill(h.z);
+      if (h.killed && h.z !== this.gman) this.onKill(h.z);
     }
+  }
+
+  targets() {
+    return this.gman && this.gman.alive ? [...this.zozniki, this.gman] : this.zozniki;
+  }
+
+  exitOpen() {
+    return !this.gman || isGone(this.gman);
+  }
+
+  updateBoss(dt) {
+    const g = this.gman;
+    if (!g) return;
+    const n = this.n;
+    const b = this.body;
+    for (const e of updateGman(g, dt, this.map, PHYSICS, b, { alive: this.zozniki.length })) {
+      if (e.type === 'say') {
+        g.bubble = { text: pick(LINES[e.key]), t: SPEECH.holdTime };
+      } else if (e.type === 'throw' || e.type === 'shot') {
+        this.enemyShots.push(e.shot);
+      } else if (e.type === 'summon') {
+        for (const r of e.requests) this.zozniki.push(spawnFromRequest(r));
+      } else if (e.type === 'stun') {
+        this.effects.rings.push({ x: e.x, y: e.y, radius: e.radius, t: EFFECTS.stunRingTime, color: '157, 180, 255' });
+        const c = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+        if (Math.hypot(c.x - e.x, c.y - e.y) <= e.radius) {
+          stunNikich(n, e.duration);
+          this.hurt(e.damage, e.x);
+          if (this.over) return;
+        }
+      } else if (e.type === 'defeated') {
+        g.bubble = { text: pick(LINES.gmanDefeat), t: GMAN.tieTime + GMAN.dissolveTime };
+        this.zozniki = [];
+        this.enemyShots = [];
+        this.effects.flash = ATTACKS.super.flashTime;
+      } else if (e.type === 'gone') {
+        say(this.speech, pick(LINES.victory), { force: true });
+      }
+    }
+    if (g.bubble && (g.bubble.t -= dt) <= 0) g.bubble = null;
+    const dmg = gmanContactDamage(g, b);
+    if (dmg > 0) this.hurt(dmg, g.body.x + g.body.w / 2);
   }
 
   onKill(z) {
@@ -416,6 +595,7 @@ class PlayScreen {
     for (const it of collectItems(this.items, this.n)) {
       const r = applyItem(this.n, it.type, this.run);
       if (r.floater) this.floater(b.x + b.w / 2, b.y, r.floater);
+      if (it.type === 'chip') this.toast = TOAST.time;
       if (r.speech && LINES[r.speech]) say(this.speech, pick(LINES[r.speech]), { force: true });
       if (r.lifeLost) { this.afterLifeLost(r.gameOver); return; }
     }
@@ -460,7 +640,7 @@ class PlayScreen {
       if (d) this.dogs.push(d);
     }
     if (input.wasPressed('stun')) {
-      const r = tryStun(n, this.zozniki);
+      const r = tryStun(n, this.targets());
       if (r) {
         this.effects.rings.push({ x: r.x, y: r.y, radius: r.radius, t: EFFECTS.stunRingTime });
         say(this.speech, pick(LINES.stun), { force: true });
@@ -468,7 +648,7 @@ class PlayScreen {
       }
     }
     if (input.wasPressed('super')) {
-      const r = trySuper(n, this.zozniki, this.view());
+      const r = trySuper(n, this.targets(), this.view());
       if (r) {
         this.effects.shake = ATTACKS.super.shakeTime;
         this.effects.flash = ATTACKS.super.flashTime;
@@ -477,10 +657,12 @@ class PlayScreen {
       }
     }
 
-    this.onHits(updateShots(n, this.shots, dt, this.map, this.zozniki));
-    for (const e of updateDogs(n, this.dogs, dt, this.map, this.zozniki, PHYSICS)) {
-      if (e.type === 'kill') this.onKill(e.z);
+    this.onHits(updateShots(n, this.shots, dt, this.map, this.targets()));
+    for (const e of updateDogs(n, this.dogs, dt, this.map, this.targets(), PHYSICS)) {
+      if (e.type === 'kill' && e.z !== this.gman) this.onKill(e.z);
     }
+    this.updateBoss(dt);
+    if (this.over) return;
     this.updateZozniki(dt);
     this.updateDanger(dt);
     if (this.over) return;
@@ -504,7 +686,7 @@ class PlayScreen {
 
     this.stats.time += dt;
     if (this.run.timer && updateTimer(this.run.timer, dt)) { this.finish(new LoseScreen(this, UI.loseTime)); return; }
-    if (reachedExit(this.map, b)) { this.finish(new LevelDoneScreen(this)); return; }
+    if (this.exitOpen() && reachedExit(this.map, b)) { this.finish(this.gman ? new FinalScreen(this) : new LevelDoneScreen(this)); return; }
 
     updateCamera(this.cam, b, this.map, dt, CAMERA);
     updateSpeech(this.speech, dt);
@@ -512,6 +694,7 @@ class PlayScreen {
   }
 
   updateEffects(dt) {
+    this.toast = Math.max(0, this.toast - dt);
     const fx = this.effects;
     fx.shake = Math.max(0, fx.shake - dt);
     fx.flash = Math.max(0, fx.flash - dt);
@@ -540,6 +723,12 @@ class PlayScreen {
 
     drawParallax(c, this.parallax, camX, SCREEN.width, SCREEN.height);
     for (const d of this.doors) drawDoor(c, d.x, d.y, camX, camY);
+    const bar = this.map.door;
+    if (bar) {
+      const feetY = this.map.spawn.y + TILE_SIZE;
+      drawBarDoor(c, bar.tx * TILE_SIZE, feetY, bar.w * TILE_SIZE, this.exitOpen(), camX, camY);
+      drawText(c, UI.barSign, (bar.tx + bar.w / 2) * TILE_SIZE - camX, feetY - 56 - camY, { size: 8, align: 'center', color: COLORS.accent, bold: true });
+    }
     for (const m of this.movers) drawTram(c, m, camX, camY);
     drawTiles(c, this.map, this.cam);
     for (const h of this.map.hints) drawSign(c, UI[h.text], h.tx * TILE_SIZE + TILE_SIZE / 2 - camX, h.ty * TILE_SIZE - camY);
@@ -547,14 +736,17 @@ class PlayScreen {
     for (const cp of this.checkpoints.list) drawCheckpoint(c, cp.x + TILE_SIZE / 2, cp.y + TILE_SIZE, cp.reached, camX, camY);
     for (const it of this.items) drawItem(c, it, camX, camY, ITEMS);
     for (const z of this.zozniki) drawZoznik(c, z, camX, camY, this.time, COLORS);
+    if (this.gman) drawGman(c, this.gman, camX, camY, this.time, COLORS, GMAN.dissolveTime);
     for (const d of this.dogs) drawDog(c, d, camX, camY, this.time);
     drawNikich(c, this.n, camX, camY, this.time, this.squash);
     for (const s of this.shots) drawShot(c, s, camX, camY);
-    for (const s of this.enemyShots) drawSmoothieShot(c, s, camX, camY);
+    for (const s of this.enemyShots) drawEnemyShot(c, s, camX, camY, this.time);
     this.drawEffects(c, camX, camY);
     for (const z of this.zozniki) {
       if (z.bubble) drawBubble(c, z.bubble.text, z.body.x + z.body.w / 2 - camX, z.body.y - camY - 8);
     }
+    const g = this.gman;
+    if (g && g.bubble && !isGone(g)) drawBubble(c, g.bubble.text, g.body.x + g.body.w / 2 - camX, g.body.y - camY - 6);
 
     const b = this.body;
     if (this.speech.text) drawBubble(c, this.speech.text, b.x + b.w / 2 - camX, b.y - camY - 4);
@@ -579,7 +771,11 @@ class PlayScreen {
       score: this.run.score,
     };
     drawHud(c, this.n, ATTACKS, this.time, hudRun, effects);
+    if (g && g.phase >= 0 && g.alive) {
+      drawBossBar(c, UI.bossName, g.health, g.maxHealth, GMAN.phaseHealth, g.invuln > 0 || g.shielded, this.time);
+    }
     drawText(c, UI.controlsHint, 4, SCREEN.height - 11, { size: 7 });
+    if (this.toast > 0) drawToast(c, photos.poker, LINES.chip[0], Math.min(this.toast, TOAST.time - this.toast) / TOAST.fade);
     if (this.time < LEVEL_BANNER_TIME) {
       const label = `${UI.levelLabel} ${this.levelIndex + 1}`;
       drawLevelBanner(c, label, UI.levelNames[this.levelIndex], Math.min(1, (LEVEL_BANNER_TIME - this.time) / 0.5));
@@ -591,7 +787,7 @@ class PlayScreen {
   drawEffects(c, camX, camY) {
     for (const r of this.effects.rings) {
       const k = 1 - r.t / EFFECTS.stunRingTime;
-      c.strokeStyle = `rgba(244, 211, 94, ${1 - k})`;
+      c.strokeStyle = `rgba(${r.color ?? '244, 211, 94'}, ${1 - k})`;
       c.lineWidth = 2;
       c.beginPath();
       c.arc(Math.round(r.x - camX), Math.round(r.y - camY), r.radius * (0.4 + 0.6 * k), 0, Math.PI * 2);
