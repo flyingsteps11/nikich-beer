@@ -5,6 +5,8 @@ import { heal, loseHealth, mountScooter, isRiding } from './nikich.js';
 import { ITEMS, DROPS } from './config.js';
 
 export const ITEM_TYPES = Object.freeze(['hotdog', 'vodka', 'cigarette', 'chip', 'beerZero', 'scooter']);
+// Бонусы — их притягивает «Магнит для халявы»; Пиво 0,0 и Самокат — нет
+export const BONUS_TYPES = Object.freeze(['hotdog', 'vodka', 'cigarette', 'chip']);
 
 const IDLE = Object.freeze({ move: 0, jumpPressed: false, jumpHeld: false, dropHeld: false });
 
@@ -36,6 +38,25 @@ export function updateItems(items, dt, map, P) {
     }
   }
   removeDead(items);
+}
+
+// «Магнит для халявы»: Бонусы ближе radius летят к центру Никича со скоростью speed.
+// Падающий Бонус перестаёт падать и летит по прямой.
+export function attractItems(items, n, dt, radius, speed) {
+  if (radius <= 0) return;
+  const cx = n.body.x + n.body.w / 2;
+  const cy = n.body.y + n.body.h / 2;
+  for (const it of items) {
+    if (!it.alive || !BONUS_TYPES.includes(it.type)) continue;
+    const dx = cx - it.x;
+    const dy = cy - it.y;
+    const d = Math.hypot(dx, dy);
+    if (d > radius || d < 1e-6) continue;
+    const k = Math.min(d, speed * dt) / d;
+    it.body = null;
+    it.x += dx * k;
+    it.y += dy * k;
+  }
 }
 
 export function itemBox(it, I = ITEMS) {

@@ -170,6 +170,22 @@ export const ITEMS = Object.freeze({
   }),
 });
 
+// Улучшения (SPEC §8). Одинаковые Улучшения складываются: множители перемножаются, прибавки суммируются.
+export const UPGRADES = Object.freeze({
+  choices: 3, // карточек на выбор после Уровня
+  salo: Object.freeze({ maxHealth: 10 }),
+  heavyHand: Object.freeze({ damageMul: 1.1 }),
+  lateForBar: Object.freeze({ speedMul: 1.1 }),
+  chainSmoker: Object.freeze({ shotRateMul: 1 / 0.85 }), // перезарядка Щелбана ×0,85
+  dadComing: Object.freeze({ superChargeMul: 1.2 }),
+  angryDog: Object.freeze({ dogHoldBonus: 1 }), // с
+  magnet: Object.freeze({ radius: 80, speed: 180 }), // px, px/с — с какого расстояния и как быстро летят Бонусы
+  renter: Object.freeze({ extraScooters: 1, offsetTiles: 3, gapTiles: 2 }), // Самокаты справа от старта
+  ironLiver: Object.freeze({ beerDamageMul: 0.5 }),
+  fiveZero: Object.freeze({ stunRadiusMul: 1.2 }),
+  bouncy: Object.freeze({ airJumps: 1 }),
+});
+
 export const LEVEL = Object.freeze({
   time: 180, // с, таймер Уровня (SPEC §9)
   lowTime: 30, // с — таймер краснеет

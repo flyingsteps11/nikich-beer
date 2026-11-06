@@ -1,7 +1,8 @@
 // Игровой цикл с фиксированным шагом 1/60 и машина экранов (SPEC §15).
-// Этап 5: титульный экран → Уровни 1–5 по порядку (Проигрыш — тот же Уровень заново) → титульный.
+// Этап 6: титульный (Начать / Продолжить / Новая игра) → Уровень → Выбор Улучшения → … → Уровень 5 → титульный.
+// Проигрыш — тот же Уровень заново. Сохранение — после выбора Улучшения и при Проигрыше (SPEC §11).
 
-import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH, ITEMS, LEVEL } from './config.js';
+import { SCREEN, LOOP, TILE_SIZE, PHYSICS, CAMERA, DEBUG, ATTACKS, EFFECTS, SPEECH, ITEMS, LEVEL, UPGRADES } from './config.js';
 import { Input, bindInput, readMoveIntent } from './input.js';
 import { fellOut, moveX } from './physics.js';
 import {
@@ -14,7 +15,9 @@ import {
   tryStun, trySuper, createSpeech, say, updateSpeech, pick, stunNikich, takeDamage, loseLife,
   isRiding, ramZozniki,
 } from './nikich.js';
-import { itemsFromMap, updateItems, collectItems, applyItem, rollLoot, createItem } from './items.js';
+import { itemsFromMap, updateItems, collectItems, applyItem, rollLoot, createItem, attractItems } from './items.js';
+import { applyUpgrades, rollChoices, extraScooterDefs, isUpgrade } from './upgrades.js';
+import { createSave, loadSave, writeSave, clearSave, addLevelStats } from './save.js';
 import {
   updateZoznik, updateEnemyShots, contactDamage, createSpawner, updateSpawner, resetSpawner,
   spawnFromRequest, isFarBehind,
@@ -25,7 +28,7 @@ import {
 } from './art.js';
 import { LEVELS } from './levels/index.js';
 import {
-  drawSign, drawLevelBanner, drawTitle, drawPause, drawCrosshair, drawText, drawBubble, drawHud, drawLose, drawLevelDone, COLORS,
+  drawSign, drawLevelBanner, drawTitle, drawUpgradeChoice, menuItemRect, upgradeCardRect, inRect, drawPause, drawCrosshair, drawText, drawBubble, drawHud, drawLose, drawLevelDone, COLORS,
 } from './ui.js';
 import { UI, LINES } from './lines.js';
 
@@ -56,13 +59,122 @@ const machine = {
   replace: (s) => { screens.length = 0; screens.push(s); },
 };
 
+// ---------- Сохранение ----------
+
+// localStorage может быть недоступен (приватный режим, запрет cookies) — тогда играем без сохранения
+function browserStorage() {
+  try {
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+const storage = browserStorage();
+const SAVE_OPTS = { maxLevel: LEVELS.length, isUpgrade };
+
+// Прохождение: номер Уровня (с 1), взятые Улучшения, общая статистика. Живёт между Уровнями и Проигрышами.
+function newCampaign() {
+  return createSave(1);
+}
+
+// ---------- Меню: мышь или клавиши ----------
+
+// state: { selected, mx, my }. Возвращает индекс выбранного пункта или -1.
+// Наведение мышью меняет выбор только когда мышь двигалась — иначе неподвижный курсор мешал бы клавишам.
+function menuInput(state, count, rectOf, prevAction, nextAction) {
+  const m = input.mouse;
+  let hovered = -1;
+  if (m.inside) {
+    for (let i = 0; i < count; i++) if (inRect(rectOf(i, count), m.x, m.y)) hovered = i;
+  }
+  if (hovered >= 0 && (m.x !== state.mx || m.y !== state.my)) state.selected = hovered;
+  state.mx = m.x;
+  state.my = m.y;
+  if (input.wasPressed(prevAction)) state.selected = (state.selected + count - 1) % count;
+  if (input.wasPressed(nextAction)) state.selected = (state.selected + 1) % count;
+  if (input.wasPressed('accept')) return state.selected;
+  if (input.wasPressed('click') && hovered >= 0) return hovered;
+  return -1;
+}
+
 class TitleScreen {
-  constructor() { this.time = 0; }
+  constructor() {
+    this.time = 0;
+    this.save = loadSave(storage, SAVE_OPTS);
+    this.confirmErase = false;
+    this.menu = { selected: 0, mx: -1, my: -1 };
+  }
+
+  items() {
+    if (this.confirmErase) return [UI.eraseNo, UI.eraseYes];
+    return this.save ? [UI.menuContinue, UI.menuNewGame] : [UI.menuStart];
+  }
+
   update(dt) {
     this.time += dt;
-    if (input.wasPressed('confirm')) machine.replace(new PlayScreen(0));
+    const items = this.items();
+    if (this.confirmErase && input.wasPressed('pause')) { this.confirmErase = false; this.menu.selected = 1; return; }
+    const i = menuInput(this.menu, items.length, menuItemRect, 'menuUp', 'menuDown');
+    if (i < 0) return;
+    if (this.confirmErase) {
+      if (i === 1) {
+        clearSave(storage);
+        machine.replace(new PlayScreen(0, newCampaign()));
+      } else {
+        this.confirmErase = false;
+        this.menu.selected = 1;
+      }
+    } else if (!this.save) {
+      machine.replace(new PlayScreen(0, newCampaign()));
+    } else if (i === 0) {
+      machine.replace(new PlayScreen(this.save.level - 1, this.save));
+    } else {
+      this.confirmErase = true;
+      this.menu.selected = 0; // по умолчанию — «Нет»
+    }
   }
-  draw(c) { drawTitle(c, this.time); }
+
+  draw(c) {
+    let note = null;
+    if (this.save && !this.confirmErase) {
+      note = `${UI.levelLabel} ${this.save.level} · ${UI.upgradesOwned}: ${this.save.upgrades.length}`;
+    }
+    drawTitle(c, this.time, {
+      items: this.items(), selected: this.menu.selected, question: this.confirmErase ? UI.eraseQuestion : null, note,
+    });
+  }
+}
+
+// Выбор Улучшения после Уровня (SPEC §8): 1 из 3, сохранение, следующий Уровень
+class UpgradeScreen {
+  constructor(under, campaign, nextIndex) {
+    this.under = under;
+    this.campaign = campaign;
+    this.nextIndex = nextIndex;
+    this.choices = rollChoices();
+    this.menu = { selected: 0, mx: -1, my: -1 };
+    this.time = 0;
+  }
+
+  update(dt) {
+    this.time += dt;
+    if (this.time < RESULT_DELAY) return;
+    let i = menuInput(this.menu, this.choices.length, upgradeCardRect, 'menuLeft', 'menuRight');
+    ['pick1', 'pick2', 'pick3'].forEach((a, k) => {
+      if (k < this.choices.length && input.wasPressed(a)) i = k;
+    });
+    if (i < 0) return;
+    const cp = this.campaign;
+    cp.upgrades.push(this.choices[i]);
+    cp.level = this.nextIndex + 1;
+    writeSave(storage, cp);
+    machine.replace(new PlayScreen(this.nextIndex, cp));
+  }
+
+  draw(c) {
+    this.under.draw(c);
+    drawUpgradeChoice(c, this.choices, this.menu.selected, this.time >= RESULT_DELAY, this.time);
+  }
 }
 
 class PauseScreen {
@@ -85,10 +197,17 @@ class LoseScreen {
     this.reason = reason;
     this.line = pick(LINES.lose);
     this.time = 0;
+    // Улучшения остаются, статистика копится; продолжить можно с этого же Уровня
+    const cp = under.campaign;
+    cp.stats = addLevelStats(cp.stats, under.stats);
+    cp.level = under.levelIndex + 1;
+    writeSave(storage, cp);
   }
   update(dt) {
     this.time += dt;
-    if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) machine.replace(new PlayScreen(this.under.levelIndex));
+    if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) {
+      machine.replace(new PlayScreen(this.under.levelIndex, this.under.campaign));
+    }
   }
   draw(c) {
     this.under.draw(c);
@@ -101,6 +220,8 @@ class LevelDoneScreen {
     this.under = under;
     this.time = 0;
     this.next = under.levelIndex + 1; // после последнего — пока на титульный (Финал и Титры — этап 11)
+    const cp = under.campaign;
+    cp.stats = addLevelStats(cp.stats, under.stats);
     const { stats, score } = under.run;
     this.lines = [
       `${UI.score}: ${score}`,
@@ -113,7 +234,12 @@ class LevelDoneScreen {
   update(dt) {
     this.time += dt;
     if (this.time >= RESULT_DELAY && input.wasPressed('confirm')) {
-      machine.replace(this.next < LEVELS.length ? new PlayScreen(this.next) : new TitleScreen());
+      if (this.next < LEVELS.length) {
+        machine.replace(new UpgradeScreen(this.under, this.under.campaign, this.next));
+      } else {
+        clearSave(storage); // игра пройдена — на титульном снова «Начать»
+        machine.replace(new TitleScreen());
+      }
     }
   }
   draw(c) {
@@ -133,14 +259,16 @@ function makeCanvas(w, h) {
 }
 
 class PlayScreen {
-  constructor(levelIndex = 0) {
+  constructor(levelIndex = 0, campaign = newCampaign()) {
     this.levelIndex = levelIndex;
+    this.campaign = campaign;
     this.level = LEVELS[levelIndex];
     this.map = this.level.build(TILE_SIZE);
     this.parallax = buildParallax(this.level.theme, this.map.pixelWidth, SCREEN.width, SCREEN.height, makeCanvas, levelIndex + 1);
     this.movers = createMovers(this.map.movers, TILE_SIZE);
     this.riding = null; // Трамвай, на крыше которого стоит Никич
     this.n = createNikich(0, 0);
+    applyUpgrades(this.n, campaign.upgrades);
     this.cam = createCamera(SCREEN.width, SCREEN.height);
     this.shots = [];
     this.dogs = [];
@@ -153,6 +281,7 @@ class PlayScreen {
     this.speech = createSpeech();
     this.effects = { rings: [], floaters: [], shake: 0, flash: 0 };
     this.items = itemsFromMap(this.map.items, TILE_SIZE);
+    this.items.push(...itemsFromMap(extraScooterDefs(this.map, this.n.mods.extraScooters), TILE_SIZE));
     this.checkpoints = createCheckpoints(this.map);
     // Прохождение Уровня: таймер, очки, статистика (SPEC §4, §9)
     this.run = { timer: this.level.timed ? createTimer(LEVEL.time) : null, score: 0, stats: { kills: 0, shots: 0, deaths: 0, time: 0 } };
@@ -282,6 +411,7 @@ class PlayScreen {
   // Подбор Предметов
   updateItemsStep(dt) {
     updateItems(this.items, dt, this.map, PHYSICS);
+    attractItems(this.items, this.n, dt, this.n.mods.magnetRadius, UPGRADES.magnet.speed);
     const b = this.body;
     for (const it of collectItems(this.items, this.n)) {
       const r = applyItem(this.n, it.type, this.run);
@@ -481,6 +611,7 @@ class PlayScreen {
       `vx ${b.vx.toFixed(0)} vy ${b.vy.toFixed(0)}`,
       `ground ${b.onGround ? 'да' : 'нет'} coyote ${b.coyote.toFixed(2)} buf ${b.jumpBuffer.toFixed(2)}`,
       `уровень ${this.levelIndex + 1} тайл ${Math.floor((b.x + b.w / 2) / TILE_SIZE)} трамвай ${this.riding ? 'да' : 'нет'}`,
+      `улучшения ${this.campaign.upgrades.join(', ') || '—'}`,
       `kills ${this.stats.kills} super ${this.n.superMeter.toFixed(0)} зожники ${this.zozniki.length}`,
     ];
     lines.forEach((l, i) => drawText(c, l, 4, 28 + i * 10, { color: COLORS.accent }));
@@ -523,7 +654,8 @@ if (new URLSearchParams(location.search).has('debug')) {
   window.__game = {
     machine,
     input,
-    level: (n) => machine.replace(new PlayScreen(n - 1)), // __game.level(3) — сразу на Уровень 3
+    // __game.level(3, ['bouncy']) — сразу на Уровень 3 с Улучшениями (сохранение не трогается)
+    level: (n, upgrades = []) => machine.replace(new PlayScreen(n - 1, createSave(n, upgrades))),
     step: (n = 1) => {
       for (let i = 0; i < n; i++) { machine.top().update(LOOP.step); input.endStep(); }
       machine.top().draw(ctx);

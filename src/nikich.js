@@ -27,6 +27,10 @@ export function createNikich(x, y, N = NIKICH) {
       dogHoldBonus: 0,
       stunRadiusMul: 1,
       beerDamageMul: 1, // «Железная печень» даст 0,5
+      speedMul: 1,
+      airJumps: 0, // «Прыгучий» — двойной прыжок
+      magnetRadius: 0, // px, 0 — магнита нет
+      extraScooters: 0, // «Прокатчик»: Самокатов у старта каждого Уровня
     },
   };
 }
@@ -58,9 +62,9 @@ export function isRiding(n) {
   return n.effects.scooter > 0;
 }
 
-// Скорость и прыжок от Самоката и Пива 0,0
+// Скорость и прыжок от Улучшений, Самоката и Пива 0,0
 export function movementMods(n, I = ITEMS) {
-  let speedMul = 1;
+  let speedMul = n.mods.speedMul;
   let jumpHeight = 1;
   if (isRiding(n)) {
     speedMul *= I.scooter.speedMul;
@@ -91,7 +95,8 @@ export function updateNikich(n, intent, dt, map, P, I = ITEMS) {
   const locked = n.hurtLock > 0 || n.stun > 0;
   const effective = locked ? { ...intent, move: 0, jumpPressed: false } : intent;
   const speedBefore = Math.abs(n.body.vx);
-  const ev = stepPlatformer(n.body, effective, dt, map, P, movementMods(n, I));
+  const phys = n.mods.airJumps > 0 ? { ...P, airJumps: P.airJumps + n.mods.airJumps } : P;
+  const ev = stepPlatformer(n.body, effective, dt, map, phys, movementMods(n, I));
   ev.scooterEnded = false;
   if (wasRiding) {
     n.effects.scooter = Math.max(0, n.effects.scooter - dt);

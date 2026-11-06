@@ -15,6 +15,13 @@ export const BINDINGS = Object.freeze({
   super: ['KeyR'],
   pause: ['Escape', 'KeyP'],
   confirm: ['Enter', 'Space', MOUSE_LEFT],
+  // Меню: клавиши отдельно от мыши, чтобы клик мимо пункта ничего не выбирал
+  accept: ['Enter', 'Space'],
+  click: [MOUSE_LEFT],
+  menuUp: ['KeyW', 'ArrowUp'],
+  menuDown: ['KeyS', 'ArrowDown'],
+  menuLeft: ['KeyA', 'ArrowLeft'],
+  menuRight: ['KeyD', 'ArrowRight'],
   pick1: ['Digit1', 'Numpad1'],
   pick2: ['Digit2', 'Numpad2'],
   pick3: ['Digit3', 'Numpad3'],

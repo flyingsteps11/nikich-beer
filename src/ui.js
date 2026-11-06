@@ -1,7 +1,7 @@
 // HUD и экраны (SPEC §4). Временная отрисовка; пиксель-арт и портреты — этап 8.
 
 import { SCREEN } from './config.js';
-import { UI } from './lines.js';
+import { UI, UPGRADE_TEXT } from './lines.js';
 
 const W = SCREEN.width;
 const H = SCREEN.height;
@@ -49,13 +49,94 @@ export function drawLevelBanner(ctx, label, name, alpha) {
   ctx.globalAlpha = 1;
 }
 
-export function drawTitle(ctx, time) {
+// Разбивка текста на строки не шире maxW (шрифт должен быть уже выставлен в ctx)
+export function wrapText(ctx, text, maxW) {
+  const lines = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > maxW) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// Пункты меню титульного экрана: прямоугольники для мыши и отрисовки
+export function menuItemRect(i) {
+  return { x: W / 2 - 90, y: H / 2 + 2 + i * 20, w: 180, h: 16 };
+}
+
+export function inRect(r, x, y) {
+  return x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
+}
+
+// menu: { items: [подписи], selected, question?, note? }
+export function drawTitle(ctx, time, menu) {
   ctx.fillStyle = COLORS.bg;
   ctx.fillRect(0, 0, W, H);
-  drawText(ctx, UI.title, W / 2, H / 2 - 30, { size: 16, color: COLORS.accent, align: 'center', bold: true });
-  if (Math.floor(time * 2) % 2 === 0) {
-    drawText(ctx, UI.start, W / 2, H / 2 + 10, { align: 'center' });
-  }
+  drawText(ctx, UI.title, W / 2, H / 2 - 50, { size: 16, color: COLORS.accent, align: 'center', bold: true });
+  if (menu.question) drawText(ctx, menu.question, W / 2, H / 2 - 18, { color: '#e63946', align: 'center' });
+  else if (menu.note) drawText(ctx, menu.note, W / 2, H / 2 - 18, { size: 7, color: COLORS.muted, align: 'center' });
+  menu.items.forEach((label, i) => {
+    const r = menuItemRect(i);
+    const sel = i === menu.selected;
+    if (sel) {
+      ctx.fillStyle = 'rgba(244, 211, 94, 0.15)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+    const text = sel ? `> ${label} <` : label;
+    drawText(ctx, text, W / 2, r.y + 4, { align: 'center', color: sel ? COLORS.accent : COLORS.text, bold: sel });
+  });
+  drawText(ctx, UI.menuHint, W / 2, H - 16, { size: 7, color: COLORS.muted, align: 'center' });
+}
+
+// Карточки выбора Улучшения
+const CARD = Object.freeze({ w: 140, h: 112, gap: 10, y: 58 });
+
+export function upgradeCardRect(i, count = 3) {
+  const x0 = (W - (count * CARD.w + (count - 1) * CARD.gap)) / 2;
+  return { x: x0 + i * (CARD.w + CARD.gap), y: CARD.y, w: CARD.w, h: CARD.h };
+}
+
+export function drawUpgradeChoice(ctx, ids, selected, ready, time) {
+  ctx.fillStyle = 'rgba(11, 11, 16, 0.88)';
+  ctx.fillRect(0, 0, W, H);
+  drawText(ctx, UI.upgradeTitle, W / 2, 22, { size: 14, color: COLORS.accent, align: 'center', bold: true });
+  ids.forEach((id, i) => {
+    const t = UPGRADE_TEXT[id];
+    const r = upgradeCardRect(i, ids.length);
+    const sel = i === selected;
+    ctx.fillStyle = sel ? '#2f3a52' : '#22263a';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = sel ? COLORS.accent : '#3a3f58';
+    ctx.fillRect(r.x, r.y, r.w, 2);
+    ctx.fillRect(r.x, r.y + r.h - 2, r.w, 2);
+    drawText(ctx, String(i + 1), r.x + 6, r.y + 6, { size: 8, color: COLORS.muted });
+    let y = r.y + 20;
+    ctx.font = 'bold 10px monospace';
+    for (const l of wrapText(ctx, t.name, r.w - 12)) {
+      drawText(ctx, l, r.x + r.w / 2, y, { size: 10, bold: true, align: 'center', color: COLORS.accent });
+      y += 12;
+    }
+    y += 6;
+    ctx.font = '8px monospace';
+    for (const l of wrapText(ctx, t.effect, r.w - 12)) {
+      drawText(ctx, l, r.x + r.w / 2, y, { size: 8, align: 'center' });
+      y += 10;
+    }
+    y += 8;
+    ctx.font = '7px monospace';
+    for (const l of wrapText(ctx, `«${t.joke}»`, r.w - 12)) {
+      drawText(ctx, l, r.x + r.w / 2, y, { size: 7, align: 'center', color: COLORS.muted });
+      y += 9;
+    }
+  });
+  if (ready && Math.floor(time * 2) % 2 === 0) drawText(ctx, UI.upgradeHint, W / 2, H - 30, { color: COLORS.accent, align: 'center' });
 }
 
 export function drawPause(ctx) {
