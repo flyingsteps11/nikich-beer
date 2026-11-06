@@ -74,6 +74,29 @@ test('кулдаун группы', () => {
   assert.equal(v.group('hurt'), true);
 });
 
+test('Общая пауза голоса глушит обычные фразы, но не важные', () => {
+  const v = readyVoice();
+  v.buffers.set('khokhol-1', { name: 'khokhol-1', duration: 3 });
+  assert.equal(v.group('hurt'), true);
+  v.current = null;
+  v.ctx.currentTime = 3 + VOICE.gap - 0.1;
+  assert.equal(v.group('nearMob'), false);
+  assert.equal(v.group('heal'), true);
+  v.current = null;
+  v.ctx.currentTime += 0.2;
+  assert.equal(v.group('nearMob'), false); // Хот-дог тоже начал паузу
+});
+
+test('«156 пиво» не чаще кулдауна', () => {
+  const v = readyVoice();
+  v.quietUntil = -Infinity;
+  assert.equal(v.group('beer'), true);
+  v.current = null;
+  v.quietUntil = -Infinity;
+  v.ctx.currentTime = VOICE.cooldown.beer - 1;
+  assert.equal(v.group('beer'), false);
+});
+
 test('mute глушит и запоминается, сбой хранилища не роняет', () => {
   const data = new Map();
   const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, val) => data.set(k, val) };

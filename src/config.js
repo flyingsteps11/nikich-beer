@@ -438,5 +438,7 @@ export const VOICE = Object.freeze({
     waveClear: Object.freeze(['saw-dude']),
   }),
   priority: Object.freeze({ firstBeer: 2, beer: 2, heal: 2, waveClear: 3 }),
-  cooldown: Object.freeze({ hurt: 5, dealDamage: 10, nearMob: 15 }),
+  cooldown: Object.freeze({ hurt: 20, dealDamage: 30, nearMob: 40, beer: 20 }),
+  gap: 12, // с, Общая пауза голоса после конца любой фразы
+  ignoreGap: Object.freeze(['firstBeer', 'heal', 'waveClear']), // звучат и во время Общей паузы
 });

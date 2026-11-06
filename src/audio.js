@@ -30,6 +30,7 @@ export class Voice {
     this.buffers = new Map();
     this.current = null;
     this.readyAt = {};
+    this.quietUntil = 0;
     this.muted = readMuted(storage, V.muteKey);
   }
 
@@ -104,8 +105,14 @@ export class Voice {
     const clips = this.V.groups[key];
     const now = this.now();
     if (!clips || now < (this.readyAt[key] ?? 0)) return false;
-    const played = this.play(clips[Math.floor(this.rng() * clips.length)], this.V.priority[key] ?? 1);
-    if (played) this.readyAt[key] = now + (this.V.cooldown[key] ?? 0);
+    if (now < this.quietUntil && !this.V.ignoreGap.includes(key)) return false;
+    const name = clips[Math.floor(this.rng() * clips.length)];
+    const played = this.play(name, this.V.priority[key] ?? 1);
+    if (played) {
+      this.readyAt[key] = now + (this.V.cooldown[key] ?? 0);
+      // Общая пауза голоса — от конца фразы
+      this.quietUntil = now + (this.buffers.get(name).duration ?? 0) + this.V.gap;
+    }
     return played;
   }
 
