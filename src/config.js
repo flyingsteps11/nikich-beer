@@ -8,7 +8,9 @@ export const SCREEN = Object.freeze({
 
 export const LOOP = Object.freeze({
   step: 1 / 60, // фиксированный шаг симуляции, с (тот же шаг — в поправке прыжка ниже)
-  maxFrame: 0.25, // больше этого за кадр не догоняем (вкладка спала)
+  maxFrame: 0.1, // SPEC §13: больше этого за кадр не догоняем — слабый ПК замедляет игру, а не телепортирует
+  snapDistance: 32, // px за шаг: скачок дальше не сглаживаем (телепорт, Контрольная точка)
+  cullMargin: 48, // px запаса по краям кадра, за ним объекты не рисуем
 });
 
 export const TILE_SIZE = 16;
@@ -183,7 +185,9 @@ export const ITEMS = Object.freeze({
     armorPerStack: 0.1,
     swayAmp: 1.2,
     swaySpeed: 1.7,
-    blurPerStack: 0.8,
+    blurMixPerStack: 0.16, // доля размытой копии мира поверх кадра за стак (SPEC §13)
+    blurMixMax: 0.6,
+    blurDownscale: 6, // во сколько раз уменьшена размытая копия
     tiltPerStack: 0.6,
   }),
   scooter: Object.freeze({
@@ -393,6 +397,7 @@ export const EFFECTS = Object.freeze({
   floaterTime: 0.6, // с, всплывающая цифра урона
   floaterRise: 20, // px вверх за время жизни
   stunRingTime: 0.25, // с, кольцо 5:0
+  hurtFlashAlpha: 0.75, // мигание при уроне: вторая отрисовка в режиме lighter
 });
 
 export const CAMERA = Object.freeze({

@@ -219,6 +219,11 @@ export function updateCamera(cam, body, map, dt, C) {
 }
 
 // Детерминированный генератор: один и тот же Уровень — один и тот же фон
+// Попадает ли полоса [x - halfW, x + halfW] в кадр по горизонтали (с запасом margin)
+export function inView(x, halfW, camX, viewW, margin = 0) {
+  return x + halfW >= camX - margin && x - halfW <= camX + viewW + margin;
+}
+
 export function seededRandom(seed) {
   let a = seed >>> 0;
   return () => {

@@ -7,8 +7,9 @@ import { Input, bindInput, readMoveIntent } from './input.js';
 import { fellOut, moveX } from './physics.js';
 import {
   createCamera, updateCamera, snapCamera, createTimer, updateTimer, formatTime,
-  createCheckpoints, updateCheckpoints, reachedExit, createMovers, updateMovers, landOnMovers,
+  createCheckpoints, updateCheckpoints, reachedExit, createMovers, updateMovers, landOnMovers, inView,
 } from './world.js';
+import { advanceClock, createInterp, capture, blend, unblend } from './loop.js';
 import {
   createNikich, steerAim, updateNikich, tryShoot, updateShots, tryDog, updateDogs,
   tryStun, trySuper, createSpeech, say, updateSpeech, pick, stunNikich, takeDamage, loseLife,
@@ -73,15 +74,41 @@ function applyScreenFx(dt) {
   screenFx.time += dt;
   const B = ITEMS.beerZero;
   const d = screenFx.drunk < 0.02 ? 0 : screenFx.drunk;
-  const blur = (B.blurPerStack * d).toFixed(2);
   const tilt = (Math.sin(screenFx.time * B.swaySpeed * 0.6) * B.tiltPerStack * d).toFixed(2);
   const zoom = (1 + d * 0.015).toFixed(3);
-  const style = d ? `blur(${blur}px)|rotate(${tilt}deg) scale(${zoom})` : '|';
+  // Только transform: CSS-фильтр размытия на весь канвас дорог для слабой видеокарты (SPEC §13)
+  const style = d ? `rotate(${tilt}deg) scale(${zoom})` : '';
   if (style === screenFx.style) return;
   screenFx.style = style;
-  const [filter, transform] = style.split('|');
-  canvas.style.filter = filter;
-  canvas.style.transform = transform;
+  canvas.style.transform = style;
+}
+
+// Размытие мира при Опьянении: уменьшенная копия поверх кадра (HUD не трогаем)
+let blurBuffer = null;
+
+function drawDrunkBlur(c, worldH, drunk) {
+  const B = ITEMS.beerZero;
+  const mix = Math.min(B.blurMixMax, B.blurMixPerStack * drunk);
+  if (mix < 0.01) return;
+  const sw = canvas.width;
+  const sh = Math.round(worldH * R);
+  const w = Math.max(1, Math.round(sw / B.blurDownscale));
+  const h = Math.max(1, Math.round(sh / B.blurDownscale));
+  if (!blurBuffer || blurBuffer.canvas.width !== w || blurBuffer.canvas.height !== h) {
+    const cv = makeCanvas(w, h);
+    blurBuffer = { canvas: cv, g: cv.getContext('2d') };
+  }
+  const g = blurBuffer.g;
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'low';
+  g.globalCompositeOperation = 'copy';
+  g.drawImage(canvas, 0, 0, sw, sh, 0, 0, w, h);
+  c.save();
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.imageSmoothingEnabled = true;
+  c.globalAlpha = mix;
+  c.drawImage(blurBuffer.canvas, 0, 0, w, h, 0, 0, sw, sh);
+  c.restore();
 }
 
 function render() {
@@ -594,8 +621,25 @@ class PlayScreen {
     this.debug = false;
     this.squash = 0; // >0 — сплющен после приземления, <0 — вытянут в прыжке
     this.time = 0;
+    this.interp = createInterp(LOOP.snapDistance);
+    this.interpList = [];
     this.respawn();
     say(this.speech, pick(LINES.levelStart), { force: true });
+  }
+
+  // Всё, что движется и рисуется по позиции, — сглаживаем между шагами (SPEC §13)
+  interpObjects() {
+    const o = this.interpList;
+    o.length = 0;
+    o.push(this.body, this.cam);
+    for (const z of this.zozniki) o.push(z.body);
+    if (this.gman) o.push(this.gman.body);
+    for (const d of this.dogs) o.push(d.body);
+    for (const s of this.shots) o.push(s);
+    for (const s of this.enemyShots) o.push(s);
+    for (const it of this.items) o.push(it);
+    for (const m of this.movers) o.push(m);
+    return o;
   }
 
   get body() { return this.n.body; }
@@ -832,6 +876,7 @@ class PlayScreen {
 
   update(dt) {
     if (this.over) return;
+    capture(this.interp, this.interpObjects());
     this.time += dt;
     if (input.wasPressed('pause')) { machine.push(new PauseScreen(this)); return; }
     if (input.wasPressed('debug')) this.debug = !this.debug;
@@ -949,6 +994,9 @@ class PlayScreen {
   }
 
   draw(c) {
+    // Между шагами логики — промежуточные позиции; только пока игра идёт (не под Паузой)
+    const live = machine.top() === this && !this.over;
+    if (live) blend(this.interp, this.interpObjects(), renderAlpha);
     const fx = this.effects;
     // Тряска экрана: сдвигаем камеру только на время отрисовки
     const shake = fx.shake > 0 ? ATTACKS.super.shakeAmp * (fx.shake / ATTACKS.super.shakeTime) : 0;
@@ -970,6 +1018,9 @@ class PlayScreen {
     }
     const camX = Math.round(this.cam.x);
     const camY = Math.round(this.cam.y);
+    const viewW = this.cam.viewW;
+    const M = LOOP.cullMargin;
+    const seen = (x, halfW = 16) => inView(x, halfW, camX, viewW, M);
 
     c.save();
     c.beginPath();
@@ -977,33 +1028,33 @@ class PlayScreen {
     c.clip();
     c.scale(this.worldScale, this.worldScale);
     drawBackdrop(c, this.parallax, camX, this.time);
-    for (const d of this.doors) drawDoor(c, d.x, d.y, camX, camY);
+    for (const d of this.doors) if (seen(d.x)) drawDoor(c, d.x, d.y, camX, camY);
     const bar = this.map.door;
     if (bar) {
       const feetY = this.map.spawn.y + TILE_SIZE;
       drawBarDoor(c, bar.tx * TILE_SIZE, feetY, bar.w * TILE_SIZE, this.exitOpen(), camX, camY, this.time);
       drawText(c, UI.barSign, (bar.tx + bar.w / 2) * TILE_SIZE - camX, feetY - 56 - camY, { size: 8, align: 'center', color: COLORS.accent, bold: true });
     }
-    for (const m of this.movers) drawTram(c, m, camX, camY);
+    for (const m of this.movers) if (seen(m.x + m.w / 2, m.w / 2)) drawTram(c, m, camX, camY);
     drawTilesTextured(c, this.map, this.cam, this.tileset);
     drawProps(c, this.props, this.propSprites, camX, camY, this.cam.viewW, this.glows);
-    for (const r of this.map.ramps) drawRamp(c, r.tx, r.ty, TILE_SIZE, camX, camY);
+    for (const r of this.map.ramps) if (seen((r.tx + 0.5) * TILE_SIZE)) drawRamp(c, r.tx, r.ty, TILE_SIZE, camX, camY);
     for (const l of this.locks) {
-      drawLockGate(c, l.left, l.leftY, LOCKS.gateHeight, l.state, camX, camY, this.time);
-      drawLockGate(c, l.right, l.rightY, LOCKS.gateHeight, l.state, camX, camY, this.time);
+      if (seen(l.left)) drawLockGate(c, l.left, l.leftY, LOCKS.gateHeight, l.state, camX, camY, this.time);
+      if (seen(l.right)) drawLockGate(c, l.right, l.rightY, LOCKS.gateHeight, l.state, camX, camY, this.time);
     }
-    for (const cp of this.checkpoints.list) drawCheckpoint(c, cp.x + TILE_SIZE / 2, cp.y + TILE_SIZE, cp.reached, camX, camY);
-    for (const it of this.items) drawItem(c, it, camX, camY, ITEMS);
-    for (const k of this.corpses) drawZoznik(c, k.z, camX, camY, this.time, COLORS, k.t);
-    for (const z of this.zozniki) drawZoznik(c, z, camX, camY, this.time, COLORS);
+    for (const cp of this.checkpoints.list) if (seen(cp.x + TILE_SIZE / 2)) drawCheckpoint(c, cp.x + TILE_SIZE / 2, cp.y + TILE_SIZE, cp.reached, camX, camY);
+    for (const it of this.items) if (seen(it.x)) drawItem(c, it, camX, camY, ITEMS);
+    for (const k of this.corpses) if (seen(k.z.body.x + k.z.body.w / 2, 24)) drawZoznik(c, k.z, camX, camY, this.time, COLORS, k.t);
+    for (const z of this.zozniki) if (seen(z.body.x + z.body.w / 2, 24)) drawZoznik(c, z, camX, camY, this.time, COLORS);
     if (this.gman) drawGman(c, this.gman, camX, camY, this.time, COLORS, GMAN.dissolveTime, photos.gmanHead);
-    for (const d of this.dogs) drawDog(c, d, camX, camY, this.time);
+    for (const d of this.dogs) if (seen(d.body.x)) drawDog(c, d, camX, camY, this.time);
     const head = headFor(this.n);
     drawNikich(c, this.n, camX, camY, this.time, this.squash, head);
     const headTop = this.body.y + this.body.h - camY - (head.img ? 13 + head.h : 24);
     drawPersonalBars(c, this.body.x + this.body.w / 2 - camX, headTop - 7, this.n.health / this.n.maxHealth, this.n.superMeter / ATTACKS.super.meterMax, this.levelIndex + 1);
-    for (const s of this.shots) drawShot(c, s, camX, camY);
-    for (const s of this.enemyShots) drawEnemyShot(c, s, camX, camY, this.time);
+    for (const s of this.shots) if (seen(s.x)) drawShot(c, s, camX, camY);
+    for (const s of this.enemyShots) if (seen(s.x)) drawEnemyShot(c, s, camX, camY, this.time);
     this.drawEffects(c, camX, camY);
     for (const z of this.zozniki) {
       if (z.bubble) drawBubble(c, z.bubble.text, z.body.x + z.body.w / 2 - camX, z.body.y - camY - 8, this.cam.viewW);
@@ -1016,6 +1067,7 @@ class PlayScreen {
     const b = this.body;
     if (this.speech.text) drawBubble(c, this.speech.text, b.x + b.w / 2 - camX, headTop - 10, this.cam.viewW);
     c.restore();
+    if (screenFx.drunk > 0.02) drawDrunkBlur(c, this.worldH, screenFx.drunk);
     c.fillStyle = '#000';
     c.fillRect(0, this.worldH, SCREEN.width, SCREEN.height - this.worldH);
 
@@ -1035,6 +1087,7 @@ class PlayScreen {
     }
     if (this.debug) this.drawDebug(c);
     if (input.mouse.inside) drawCrosshair(c, input.mouse.x, input.mouse.y);
+    if (live) unblend(this.interp);
   }
 
   hudState() {
@@ -1234,25 +1287,103 @@ document.addEventListener('visibilitychange', () => {
 let fps = 60;
 let acc = 0;
 let last = performance.now();
+let renderAlpha = 1; // доля до следующего шага логики — для интерполяции отрисовки
 
 function frame(now) {
+  if (bench && bench.skip(now)) { requestAnimationFrame(frame); return; }
   let dt = (now - last) / 1000;
   last = now;
   if (dt > 0) fps += (1 / dt - fps) * DEBUG.fpsSmoothing;
-  acc += Math.min(dt, LOOP.maxFrame);
-  while (acc >= LOOP.step) {
+  const clock = advanceClock(acc, dt, LOOP.step, LOOP.maxFrame);
+  acc = clock.acc;
+  for (let i = 0; i < clock.steps; i++) {
     if (input.wasPressed('fullscreen')) toggleFullscreen();
     if (input.wasPressed('mute')) voice.toggleMute();
     machine.top().update(LOOP.step);
     input.endStep();
-    acc -= LOOP.step;
   }
+  renderAlpha = clock.alpha;
   applyScreenFx(Math.min(dt, LOOP.maxFrame));
-  render();
+  // Без шага логики кадр меняется только в игре (интерполяция); меню и Паузу зря не перерисовываем
+  const top = machine.top();
+  const smooth = top instanceof PlayScreen && !top.over;
+  if (clock.steps > 0 || smooth) {
+    const r0 = performance.now();
+    render();
+    if (bench) bench.frame(now, performance.now() - r0, clock.steps);
+  }
   requestAnimationFrame(frame);
 }
 
-machine.replace(new TitleScreen());
+// ?bench — замер производительности (SPEC §13): Уровень 4, 12 Зожников, потом Опьянение 4.
+// &hz=30 — рисовать не чаще 30 раз в секунду (как монитор 30 Гц)
+function createBench(params) {
+  const hz = Number(params.get('hz')) || 0;
+  const PH = [['прогрев', 1], ['обычно', 4], ['Опьянение 4', 4]];
+  const KINDS = ['runner', 'smoothie', 'cyclist', 'yoga', 'runner', 'moto'];
+  const t0 = performance.now();
+  let shownAt = 0;
+  const rows = PH.map(([name]) => ({ name, iv: [], render: [], steps: [] }));
+  let lastNow = 0;
+  let result = null;
+  const phaseAt = (t) => {
+    let end = 0;
+    for (let i = 0; i < PH.length; i++) { end += PH[i][1]; if (t < end) return i; }
+    return -1;
+  };
+  const avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
+  const p95 = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length * 0.95)] ?? 0;
+  const play = new PlayScreen(3, { ...createSave(4, []), debug: true });
+  play.n.infiniteLives = true;
+  machine.replace(play);
+  input.press('KeyD');
+  return {
+    skip(now) {
+      if (!hz) return false;
+      if (now - shownAt < 1000 / hz - 1.5) return true;
+      shownAt = now;
+      return false;
+    },
+    frame(now, renderMs, steps) {
+      if (result) { result.lines.forEach((l, i) => drawText(ctx, l, 6, 40 + i * 10, { size: 7, color: '#00ff88' })); return; }
+      const ph = phaseAt((now - t0) / 1000);
+      const b = play.body;
+      if (machine.top() !== play) machine.replace(play);
+      while (play.zozniki.length < 12) {
+        const i = play.zozniki.length;
+        play.zozniki.push(spawnFromRequest({ kind: KINDS[i % KINDS.length], x: b.x + 50 + i * 16, y: b.y + b.h }));
+      }
+      if (ph === 2) { play.n.drunk = 4; play.n.effects.beer = 10; }
+      if (ph > 0 && lastNow) {
+        const r = rows[ph];
+        r.iv.push(now - lastNow);
+        r.render.push(renderMs);
+        r.steps.push(steps);
+      }
+      lastNow = now;
+      if (ph !== -1) return;
+      input.release('KeyD');
+      const table = rows.slice(1).map((r) => ({
+        фаза: r.name,
+        fps: +(1000 / avg(r.iv)).toFixed(1),
+        'кадр p95, мс': +p95(r.iv).toFixed(1),
+        'отрисовка, мс': +avg(r.render).toFixed(2),
+        'отрисовка p95, мс': +p95(r.render).toFixed(2),
+        'шагов за кадр': +avg(r.steps).toFixed(2),
+        'шагов макс': Math.max(...r.steps),
+      }));
+      console.table(table);
+      const lines = table.map((t) => `${t.фаза}: ${t.fps} fps, отрисовка ${t['отрисовка, мс']} мс, шагов ${t['шагов за кадр']} (макс ${t['шагов макс']})`);
+      result = { table, hz, lines };
+      window.__bench = result;
+    },
+  };
+}
+
+const benchParams = new URLSearchParams(location.search);
+let bench = null;
+if (benchParams.has('bench')) bench = createBench(benchParams);
+else machine.replace(new TitleScreen());
 requestAnimationFrame(frame);
 
 // ?debug в адресе — доступ к игре из консоли для проверки (в обычной игре не включается)

@@ -1,7 +1,7 @@
 import {
   OUTLINE, shade, limb, blob, disc, shadowUnder, gait, airPose, STAND, breathe, humanoid, wheel, face, stripes, plaid,
 } from './rig.js';
-import { ZOZNIKI, DEATH } from './config.js';
+import { ZOZNIKI, DEATH, EFFECTS } from './config.js';
 
 const SKIN = '#f0c8a0';
 const WHITE = '#ffffff';
@@ -48,13 +48,14 @@ function movePose(b, time, { stride = 9, runAt = 60, amount = 1 } = {}) {
   return gait(walkPhase(b.x, stride), k, { run: speed > runAt });
 }
 
+// Мигание при уроне: вторая отрисовка поверх в режиме lighter — без ctx.filter,
+// который в Firefox и на слабых видеокартах очень дорог (SPEC §13)
 function withFlash(c, on, draw) {
-  if (!on) {
-    draw();
-    return;
-  }
+  draw();
+  if (!on) return;
   c.save();
-  c.filter = 'brightness(2.4) saturate(0.2)';
+  c.globalCompositeOperation = 'lighter';
+  c.globalAlpha = EFFECTS.hurtFlashAlpha;
   draw();
   c.restore();
 }
